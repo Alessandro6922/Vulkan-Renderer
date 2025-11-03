@@ -1,3 +1,9 @@
+/*
+TODO:
+	Texturing and models innit bruv
+*/
+
+
 #include <vulkan/vulkan.h> // according to the tutorial this isnt needed as its included in the below header but i get errors without it so idk
 #define GLFW_INCLUE_VULKAN
 #include <GLFW/glfw3.h>
@@ -54,25 +60,32 @@ namespace {
 			switch (key)
 			{
 			case GLFW_KEY_W:
-				camera.setVelocity(glm::vec3(1.0f, camera.getVelocity().y, camera.getVelocity().z));
-				break;
-			case GLFW_KEY_S:
-				camera.setVelocity(glm::vec3(-1.0f, camera.getVelocity().y, camera.getVelocity().z));
-				break;
-			case GLFW_KEY_A:
 				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, -1.0f));
 				break;
-			case GLFW_KEY_D:
+			case GLFW_KEY_S:
 				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 1.0f));
+				break;
+			case GLFW_KEY_A:
+				camera.setVelocity(glm::vec3(-1.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_D:
+				camera.setVelocity(glm::vec3(1.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_E:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, 1.0f, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_Q:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, -1.0f, camera.getVelocity().z));
 				break;
 			case GLFW_KEY_ESCAPE:
 				if (lockMouse) {
 					glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+					lockMouse = false;
 				}
 				else {
 					glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+					lockMouse = true;
 				}
-				lockMouse = !lockMouse;
 				break;
 			default:
 				break;
@@ -82,16 +95,22 @@ namespace {
 			switch (key)
 			{
 			case GLFW_KEY_W:
-				camera.setVelocity(glm::vec3(0.0f, camera.getVelocity().y, camera.getVelocity().z));
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 0.0f));
 				break;
 			case GLFW_KEY_S:
-				camera.setVelocity(glm::vec3(0.0f, camera.getVelocity().y, camera.getVelocity().z));
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 0.0f));
 				break;
 			case GLFW_KEY_A:
-				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 0.0f));
+				camera.setVelocity(glm::vec3(0.0f, camera.getVelocity().y, camera.getVelocity().z));
 				break;
 			case GLFW_KEY_D:
-				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 0.0f));
+				camera.setVelocity(glm::vec3(0.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_E:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, 0.0f, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_Q:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, 0.0f, camera.getVelocity().z));
 				break;
 			default:
 				break;
@@ -685,6 +704,11 @@ private:
 		createSwapChain();
 		createImageViews();
 		createFrameBuffers();
+
+		//update the window size for imgui... does this do anything? visually seemingly no but lowkey i have no idea...
+		ImGuiIO& io = ImGui::GetIO();
+		io.DisplaySize.x = (float)swapChainExtent.width;
+		io.DisplaySize.y = (float)swapChainExtent.height;
 	}
 
 	void cleanupSwapChain() {
