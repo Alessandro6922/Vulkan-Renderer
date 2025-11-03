@@ -18,10 +18,88 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "External/ImGui/imgui.h"
+#include "External/ImGui/imgui_impl_glfw.h"
+#include "External/ImGui/imgui_impl_vulkan.h"
+
+#include "Camera.h"
+
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+Camera camera;
+
+namespace {
+	double prevX = 0.0f;
+	double prevY = 0.0f;
+
+	bool lockMouse = true;
+
+	void mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition) {		
+		if (lockMouse) {
+			float changeX = static_cast<float>((prevX - xPosition) * camera.getSensitivity());
+			float changeY = static_cast<float>((prevY - yPosition) * camera.getSensitivity());
+
+			camera.updateRotation(changeX, changeY);
+
+			prevX = xPosition;
+			prevY = yPosition;
+		}
+	}
+
+	void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+		if (action == GLFW_PRESS) {
+			switch (key)
+			{
+			case GLFW_KEY_W:
+				camera.setVelocity(glm::vec3(1.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_S:
+				camera.setVelocity(glm::vec3(-1.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_A:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, -1.0f));
+				break;
+			case GLFW_KEY_D:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 1.0f));
+				break;
+			case GLFW_KEY_ESCAPE:
+				if (lockMouse) {
+					glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+				}
+				else {
+					glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+				}
+				lockMouse = !lockMouse;
+				break;
+			default:
+				break;
+			}
+		}
+		if (action == GLFW_RELEASE) {
+			switch (key)
+			{
+			case GLFW_KEY_W:
+				camera.setVelocity(glm::vec3(0.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_S:
+				camera.setVelocity(glm::vec3(0.0f, camera.getVelocity().y, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_A:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 0.0f));
+				break;
+			case GLFW_KEY_D:
+				camera.setVelocity(glm::vec3(camera.getVelocity().x, camera.getVelocity().y, 0.0f));
+				break;
+			default:
+				break;
+			}
+		}
+	}
+}
+
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -123,6 +201,7 @@ public:
 	void run() {
 		initWindow();
 		initVulkan();
+		initImGui();
 		mainLoop();
 		cleanup();
 	}
@@ -143,11 +222,15 @@ private:
 	VkQueue graphicsQueue;
 	VkQueue presentationQueue;
 
+	VkPresentModeKHR presentMode;
+
 	VkSwapchainKHR swapChain;
 	std::vector<VkImage> swapChainImages;
 	std::vector<VkImageView> swapChainImageViews;
 	VkFormat swapChainImageFormat;
 	VkExtent2D swapChainExtent;
+
+	uint32_t imageCount;
 
 	VkRenderPass renderPass;
 	VkDescriptorSetLayout descriptorSetLayout;
@@ -179,6 +262,8 @@ private:
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
 
+	VkDescriptorPool imGUIDescriptorPool;
+
 	void initWindow() {
 		// initialise the GLFW library and tell it not to create an openGL context
 		glfwInit(); 
@@ -189,11 +274,80 @@ private:
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetCursorPosCallback(window, mouseMoveCallback);
+		glfwSetKeyCallback(window, keyCallback);
 	}
 
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
 		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
 		app->framebufferResized = true;
+	}
+
+	void createImGuiDescriptorPool() {
+		VkDescriptorPoolSize poolSizes[] = {
+			{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+			{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+			{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+			{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+			{VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+			{VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+			{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+			{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+			{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}
+		};
+
+		VkDescriptorPoolCreateInfo poolCreateInfo{};
+		poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		poolCreateInfo.maxSets = 1000 * IM_ARRAYSIZE(poolSizes);
+		poolCreateInfo.poolSizeCount = (uint32_t) IM_ARRAYSIZE(poolSizes);
+		poolCreateInfo.pPoolSizes = poolSizes;
+
+		if (vkCreateDescriptorPool(device, &poolCreateInfo, nullptr, &imGUIDescriptorPool) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create ImGUI Descriptor Pool");
+		}
+	}
+
+	void initImGui() {
+		createImGuiDescriptorPool();
+
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+
+		bool installGLFWCallbacks = true;
+
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableSetMousePos;
+		io.DisplaySize.x = (float)WIDTH;
+		io.DisplaySize.y = (float)HEIGHT;
+		//io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+		ImGui_ImplGlfw_InitForVulkan(window, installGLFWCallbacks);
+
+		ImGui::GetStyle().FontScaleMain = 1.0f;
+		//ImGui::GetStyle().Colors[ImGuiCol_WindowBg].w = 0.0f;
+		ImGui::StyleColorsDark();
+
+		ImGui_ImplVulkan_InitInfo initInfo{};
+		initInfo.ApiVersion = VK_API_VERSION_1_0;
+		initInfo.Instance = instance;
+		initInfo.PhysicalDevice = physicalDevice;
+		initInfo.Device = device;
+		initInfo.QueueFamily = ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
+		initInfo.Queue = graphicsQueue;
+		initInfo.DescriptorPool = imGUIDescriptorPool;
+		initInfo.MinImageCount = ImGui_ImplVulkanH_GetMinImageCountFromPresentMode(presentMode);
+		initInfo.ImageCount = imageCount;
+		initInfo.PipelineInfoMain.RenderPass = renderPass;
+		initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+		ImGui_ImplVulkan_Init(&initInfo);
+		//ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physicalDevice, device, window, ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice), nullptr, WIDTH, HEIGHT, imageCount, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 	}
 
 	void initVulkan() {
@@ -465,10 +619,10 @@ private:
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+		presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
 		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+		imageCount = swapChainSupport.capabilities.minImageCount + 1;
 
 		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
 			imageCount = swapChainSupport.capabilities.maxImageCount;
@@ -724,9 +878,10 @@ private:
 
 		UniformBufferObject ubo{};
 		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+		//ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.proj = glm::perspective(glm::radians(70.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
 		ubo.proj[1][1] *= -1; // flip render for vulkan
+		ubo.view = camera.getViewMatrix();
 
 		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 	}
@@ -814,12 +969,13 @@ private:
 		renderPassInfo.renderArea.offset = { 0, 0 };
 		renderPassInfo.renderArea.extent = swapChainExtent;
 
-		VkClearValue clearColour = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+		VkClearValue clearColour = { {{0.3f, 0.3f, 0.8f, 1.0f}} };
 		renderPassInfo.clearValueCount = 1;
 		renderPassInfo.pClearValues = &clearColour;
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
 
 		VkBuffer vertexBuffers[] = { vertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
@@ -844,6 +1000,8 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+				
+		imGuiRender(commandBuffer);
 
 		vkCmdEndRenderPass(commandBuffer);
 
@@ -1091,6 +1249,7 @@ private:
 		while (!glfwWindowShouldClose(window)) {
 			// check for events
 			glfwPollEvents();
+			camera.update();
 			drawFrame();
 		}
 
@@ -1161,6 +1320,33 @@ private:
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
+	void imGuiRender(VkCommandBuffer commandBuffer) {
+		static float f = 0.0f;
+
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		//ImGui::DockSpaceOverViewport(); // this makes things grey atm and i cba fixing it rn
+
+		ImGui::Begin("Info");
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::Text("Position: %.3f %.3f %.3f", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
+		ImGui::Text("Yaw: %.3f Pitch: %.3f", camera.getYaw(), camera.getPitch());
+		ImGui::End();
+
+		//ImGui::ShowDemoWindow();
+
+		ImGui::Render();
+
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer); // imgui render bullshit
+
+		//if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+		//	ImGui::UpdatePlatformWindows();
+		//	ImGui::RenderPlatformWindowsDefault();
+		//}
+	}
+
 	void cleanup() {
 		cleanupSwapChain();
 
@@ -1169,7 +1355,12 @@ private:
 			vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
 		}
 
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+
 		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, imGUIDescriptorPool, nullptr);
 
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
