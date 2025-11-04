@@ -1,3 +1,7 @@
+//////////////////
+// AT SOMEPOINT WHEN YOU OBJECT ORIENT EVERYTHING THIS WILL BE WHERE IMGUI GETS HANDLED
+//////////////////
+
 #pragma once
 
 #include <vulkan/vulkan.h>
