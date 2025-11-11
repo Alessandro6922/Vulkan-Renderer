@@ -9,7 +9,7 @@ TODO:
 
 #include <vulkan/vulkan.h> // according to the tutorial this isnt needed as its included in the below header but i get errors without it so idk
 #define GLFW_INCLUE_VULKAN
-#include <GLFW/glfw3.h>
+#include "External/glfw3.4/include/GLFW/glfw3.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -27,9 +27,9 @@ TODO:
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
+#include "External/glm/glm.hpp"
+#include "External/glm/gtc/matrix_transform.hpp"
+#include "External/glm/gtx/hash.hpp"
 
 #include "External/ImGui/imgui.h"
 #include "External/ImGui/imgui_impl_glfw.h"
@@ -43,13 +43,15 @@ TODO:
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "External/tinyObjLoader/tiny_obj_loader.h"
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 1600;
+const uint32_t HEIGHT = 1200;
 
-const std::string MODEL_PATH = "Resources/Models/viking_room.obj";
-const std::string TEXTURE_PATH = "Resources/Textures/viking_room.png";
+const std::string MODEL_PATH = "Resources/Models/grassBladeHigh.obj";
+const std::string TEXTURE_PATH = "Resources/Textures/grass.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+const int GRASS_BLADE_COUNT = 10000;
 
 Camera camera;
 
@@ -235,6 +237,23 @@ struct UniformBufferObject {
 	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 proj;
+	float instancesPerAxis;
+	float spacing;
+	float grassHeight;
+	float bladeThickness;
+	glm::vec4 bezierCPoint1;
+	glm::vec4 bezierCPoint2;
+	glm::vec4 bezierEndPoint;
+};
+
+struct GrassParameters {
+	float instancesPerAxis;
+	float spacing;
+	float grassHeight;
+	float bladeThickness;
+	glm::vec4 bezierCPoint1;
+	glm::vec4 bezierCPoint2;
+	glm::vec4 bezierEndPoint;
 };
 
 // The program gets wrapped into a class
@@ -244,6 +263,7 @@ public:
 		initWindow();
 		initVulkan();
 		initImGui();
+		initBufferParams();
 		mainLoop();
 		cleanup();
 	}
@@ -322,6 +342,8 @@ private:
 	VkImage colorImage;
 	VkDeviceMemory colorImageMemory;
 	VkImageView colorImageView;
+
+	GrassParameters grassParameters;
 
 
 	void initWindow() {
@@ -408,6 +430,16 @@ private:
 
 		ImGui_ImplVulkan_Init(&initInfo);
 		//ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physicalDevice, device, window, ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice), nullptr, WIDTH, HEIGHT, imageCount, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+	}
+
+	void initBufferParams() {
+		grassParameters.grassHeight = 0.3f;
+		grassParameters.instancesPerAxis = 100.0f;
+		grassParameters.spacing = 0.05f;
+		grassParameters.bladeThickness = 0.2f;
+		grassParameters.bezierCPoint1 = glm::vec4(0.0f, 0.75f, 0.0f, 0.0f);
+		grassParameters.bezierCPoint2 = glm::vec4(0.5f, 1.2f, 0.0f, 0.0f);
+		grassParameters.bezierEndPoint = glm::vec4(-1.2, 1.2, 0, 3);
 	}
 
 	void initVulkan() {
@@ -525,7 +557,7 @@ private:
 		rasterizer.rasterizerDiscardEnable = VK_FALSE;
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizer.lineWidth = 1.0f;
-		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasterizer.cullMode = VK_CULL_MODE_NONE;
 		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasterizer.depthBiasEnable = VK_FALSE;
 		rasterizer.depthBiasConstantFactor = 0.0f;
@@ -1331,11 +1363,18 @@ private:
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
 		UniformBufferObject ubo{};
-		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		//ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(70.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+		ubo.proj = glm::perspective(glm::radians(70.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 1000.0f);
 		ubo.proj[1][1] *= -1; // flip render for vulkan
 		ubo.view = camera.getViewMatrix();
+		ubo.instancesPerAxis = grassParameters.instancesPerAxis;
+		ubo.spacing = grassParameters.spacing;
+		ubo.grassHeight = grassParameters.grassHeight;
+		ubo.bladeThickness = grassParameters.bladeThickness;
+		ubo.bezierCPoint1 = grassParameters.bezierCPoint1;
+		ubo.bezierCPoint2 = grassParameters.bezierCPoint2;
+		ubo.bezierEndPoint = grassParameters.bezierEndPoint;
 
 		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 	}
@@ -1470,7 +1509,7 @@ private:
 
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
 				
 		imGuiRender(commandBuffer);
 
@@ -1825,6 +1864,13 @@ private:
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::Text("Position: %.3f %.3f %.3f", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
 		ImGui::Text("Yaw: %.3f Pitch: %.3f", camera.getYaw(), camera.getPitch());
+		ImGui::SliderFloat("Blades per axis", &grassParameters.instancesPerAxis, 100.0f, 1000.0f, "%1.0f");
+		ImGui::SliderFloat("Spacing", &grassParameters.spacing, 0.01f, 1.0f);
+		ImGui::SliderFloat("Grass height", &grassParameters.grassHeight, 0.1f, 5.0f);
+		ImGui::SliderFloat("Blade thickness", &grassParameters.bladeThickness, 0.1f, 1.0f);
+		ImGui::DragFloat4("Bezier Control Point 1", &grassParameters.bezierCPoint1.x);
+		ImGui::DragFloat4("Bezier Control Point 2", &grassParameters.bezierCPoint2.x);
+		ImGui::DragFloat4("Bezier End Point / Scaling factor", &grassParameters.bezierEndPoint.x);
 		ImGui::End();
 
 		//ImGui::ShowDemoWindow();
