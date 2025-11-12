@@ -53,12 +53,14 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\shader.frag">
+    <None Include="shaders\grassShader.frag">
       <Filter>Source Files\shaders</Filter>
     </None>
-    <None Include="shaders\shader.vert">
+    <None Include="shaders\grassShader.vert">
       <Filter>Source Files\shaders</Filter>
     </None>
+    <None Include="shaders\groundShader.frag" />
+    <None Include="shaders\groundShader.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h">

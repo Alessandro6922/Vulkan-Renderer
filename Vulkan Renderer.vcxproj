@@ -155,8 +155,10 @@
     <ClCompile Include="Renderer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\shader.frag" />
-    <None Include="shaders\shader.vert" />
+    <None Include="shaders\grassShader.frag" />
+    <None Include="shaders\grassShader.vert" />
+    <None Include="shaders\groundShader.frag" />
+    <None Include="shaders\groundShader.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
