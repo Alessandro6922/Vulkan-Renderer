@@ -1,6 +1,12 @@
 /*
 TODO:
 	update descriptor sets at some point to have a seperate version for grass and ground cause like wtf does the ground care about grass parameters innit
+	create two more texture samplers
+		one for ground texture
+		one for heightmap
+	create a tesselation shader for the ground pipeline
+	create a compute(?) shader to pick a bunch of random points based on the ground plane size and hightmap displacement then pass them in a buffer to the grass vertex shader to be indexed
+	by the instance id as the grass positions
 */
 
 
@@ -1405,7 +1411,7 @@ private:
 		samplerInfo.magFilter = VK_FILTER_LINEAR;
 		samplerInfo.minFilter = VK_FILTER_LINEAR;
 		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
 		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
 		VkPhysicalDeviceProperties properties{};
