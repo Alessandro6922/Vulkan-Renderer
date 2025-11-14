@@ -1,12 +1,15 @@
 #version 450
+#extension GL_KHR_vulkan_glsl : enable
 
 const int grassCount = 16384;
 
-layout(local_size_x = 256, local_size_y = 64, local_size_z, 1) in;
-
-layout(std140, binding = 2) buffer bufferGrassPositionsSSBO{
+layout(set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
     vec3 positionsOut[];
 };
+
+layout(set = 1, binding = 1) uniform sampler2D displacementSampler;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 void main(){
     

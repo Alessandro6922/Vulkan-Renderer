@@ -1,12 +1,8 @@
 /*
 TODO:
-	update descriptor sets at some point to have a seperate version for grass and ground cause like wtf does the ground care about grass parameters innit
-	create two more texture samplers
-		one for ground texture
-		one for heightmap
-	create a tesselation shader for the ground pipeline
-	create a compute(?) shader to pick a bunch of random points based on the ground plane size and hightmap displacement then pass them in a buffer to the grass vertex shader to be indexed
-	by the instance id as the grass positions
+	finish compute shader for grass points
+	look into geometry shader for culling and lods
+	also look into draw indirect for lods again and other stuff idk
 */
 
 
@@ -615,10 +611,12 @@ private:
 		computeShaderStageInfo.module = computeShaderModule;
 		computeShaderStageInfo.pName = "main";
 
+		VkDescriptorSetLayout layouts[] = { grassDescriptorSetLayout, groundDescriptorSetLayout };
+
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &grassDescriptorSetLayout;
+		pipelineLayoutInfo.pSetLayouts = layouts;
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &grassPositionComputePipelineLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create grass position compute pipeline layout!");
