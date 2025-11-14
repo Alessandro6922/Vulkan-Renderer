@@ -52,7 +52,10 @@ const uint32_t HEIGHT = 1200;
 const std::string HIGH_LOD_MODEL_PATH = "Resources/Models/grassBladeHigh.obj";
 const std::string LOW_LOD_MODEL_PATH = "Resources/Models/grassBladeLow.obj";
 const std::string GROUND_MODEL_PATH = "Resources/Models/groundPlane.obj";
-const std::string TEXTURE_PATH = "Resources/Textures/grass.png";
+
+const std::string GRASS_TEXTURE_PATH = "Resources/Textures/grass.png";
+const std::string GROUND_TEXTURE_PATH = "Resources/Textures/grassFlat.jpg";
+const std::string GROUND_DISPLACEMENT_TEXTURE_PATH = "Resources/Textures/groundDisplacement.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -303,9 +306,11 @@ private:
 	uint32_t imageCount;
 
 	VkRenderPass renderPass;
-	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorSetLayout grassDescriptorSetLayout;
 	VkPipelineLayout grassPipelineLayout;
 	VkPipeline grassGraphicsPipeline;
+
+	VkDescriptorSetLayout groundDescriptorSetLayout;
 	VkPipelineLayout groundPipelineLayout;
 	VkPipeline groundGraphicsPipeline;
 
@@ -344,15 +349,28 @@ private:
 	std::vector<VkDeviceMemory> uGrassBuffersMemory;
 	std::vector<void*> uGrassBuffersMapped;
 
-	VkDescriptorPool descriptorPool;
-	std::vector<VkDescriptorSet> descriptorSets;
+	VkDescriptorPool grassDescriptorPool;
+	std::vector<VkDescriptorSet> grassDescriptorSets;
+
+	VkDescriptorPool groundDescriptorPool;
+	std::vector<VkDescriptorSet> groundDescriptorSets;
 
 	VkDescriptorPool imGUIDescriptorPool;
 
 	uint32_t mipLevels;
-	VkImage textureImage;
-	VkDeviceMemory textureImageMemory;
-	VkImageView textureImageView;
+
+	VkImage grassTextureImage;
+	VkDeviceMemory grassTextureImageMemory;
+	VkImageView grassTextureImageView;
+
+	VkImage groundTextureImage;
+	VkDeviceMemory groundTextureImageMemory;
+	VkImageView groundTextureImageView;
+
+	VkImage groundDisplacementTextureImage;
+	VkDeviceMemory groundDisplacementTextureImageMemory;
+	VkImageView groundDisplacementTextureImageView;
+
 	VkSampler textureSampler;
 
 	VkImage depthImage;
@@ -479,15 +497,9 @@ private:
 		createColorResources();
 		createDepthResources();
 		createFrameBuffers();
-		createTextureImage();
-		createTextureImageView();
+		createTextureImagesAndViews();
 		createTextureSampler();
-		loadModel(HIGH_LOD_MODEL_PATH, grassVertices, grassIndices);
-		createVertexBuffer(grassVertices, grassVertexBuffer, grassVertexBufferMemory);
-		createIndexBuffer(grassIndices, grassIndexBuffer, grassIndexBufferMemory);
-		loadModel(GROUND_MODEL_PATH, groundVertices, groundIndices);
-		createVertexBuffer(groundVertices, groundVertexBuffer, groundVertexBufferMemory);
-		createIndexBuffer(groundIndices, groundIndexBuffer, groundIndexBufferMemory);
+		loadModels();
 		createUniformBuffers();
 		createDescriptorPools();
 		createDescriptorSets();
@@ -496,6 +508,11 @@ private:
 	}
 
 	void createDescriptorSetLayouts() {
+		createGrassDescriptorSetLayout();
+		createGroundDescriptorSetLayout();
+	}
+
+	void createGrassDescriptorSetLayout() {
 		VkDescriptorSetLayoutBinding uMatrixLayoutBinding{};
 		uMatrixLayoutBinding.binding = 0;
 		uMatrixLayoutBinding.descriptorCount = 1;
@@ -524,8 +541,42 @@ private:
 		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
 		layoutInfo.pBindings = bindings.data();
 
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create descriptor set layouts!");
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &grassDescriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create grass descriptor set layouts!");
+		}
+	}
+
+	void createGroundDescriptorSetLayout() {
+		VkDescriptorSetLayoutBinding uMatrixLayoutBinding{};
+		uMatrixLayoutBinding.binding = 0;
+		uMatrixLayoutBinding.descriptorCount = 1;
+		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
+		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkDescriptorSetLayoutBinding displacementSamplerLayoutBinding{};
+		displacementSamplerLayoutBinding.binding = 1;
+		displacementSamplerLayoutBinding.descriptorCount = 1;
+		displacementSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		displacementSamplerLayoutBinding.pImmutableSamplers = nullptr;
+		displacementSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
+		textureSamplerLayoutBinding.binding = 2;
+		textureSamplerLayoutBinding.descriptorCount = 1;
+		textureSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		textureSamplerLayoutBinding.pImmutableSamplers = nullptr;
+		textureSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uMatrixLayoutBinding, displacementSamplerLayoutBinding, textureSamplerLayoutBinding };
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &groundDescriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create ground descriptor set layouts!");
 		}
 	}
 
@@ -649,12 +700,12 @@ private:
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+		pipelineLayoutInfo.pSetLayouts = &grassDescriptorSetLayout;
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &grassPipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create pipeline layout!");
+			throw std::runtime_error("Failed to create grass pipeline layout!");
 		}
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -803,12 +854,12 @@ private:
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+		pipelineLayoutInfo.pSetLayouts = &groundDescriptorSetLayout;
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &groundPipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create pipeline layout!");
+			throw std::runtime_error("Failed to create ground pipeline layout!");
 		}
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -1132,6 +1183,16 @@ private:
 		throw std::runtime_error("Failed to find supported format!");
 	}
 
+	void loadModels() {
+		loadModel(HIGH_LOD_MODEL_PATH, grassVertices, grassIndices);
+		createVertexBuffer(grassVertices, grassVertexBuffer, grassVertexBufferMemory);
+		createIndexBuffer(grassIndices, grassIndexBuffer, grassIndexBufferMemory);
+
+		loadModel(GROUND_MODEL_PATH, groundVertices, groundIndices);
+		createVertexBuffer(groundVertices, groundVertexBuffer, groundVertexBufferMemory);
+		createIndexBuffer(groundIndices, groundIndexBuffer, groundIndexBufferMemory);
+	}
+
 	void loadModel(std::string modelPath, std::vector<Vertex>& vertexBuffer, std::vector<uint32_t>& indexBuffer) {
 		tinyobj::attrib_t attrib;
 		std::vector<tinyobj::shape_t> shapes;
@@ -1249,14 +1310,25 @@ private:
 		colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 
-	void createTextureImage() {
+	void createTextureImagesAndViews() {
+		createTextureImage(GRASS_TEXTURE_PATH, grassTextureImage, grassTextureImageMemory);
+		createTextureImageView(grassTextureImageView, grassTextureImage);
+
+		createTextureImage(GROUND_TEXTURE_PATH, groundTextureImage, groundTextureImageMemory);
+		createTextureImageView(groundTextureImageView, groundTextureImage);
+
+		createTextureImage(GROUND_DISPLACEMENT_TEXTURE_PATH, groundDisplacementTextureImage, groundDisplacementTextureImageMemory);
+		createTextureImageView(groundDisplacementTextureImageView, groundDisplacementTextureImage);
+	}
+
+	void createTextureImage(std::string imagePath, VkImage& textureImage, VkDeviceMemory& textureImageMemory) {
 		int texWidth, texHeight, texChannels;
 
-		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		stbi_uc* pixels = stbi_load(imagePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 		if (!pixels) {
-			throw std::runtime_error("Failed to load texture image!");
+			throw std::runtime_error("Failed to load texture image : " + imagePath);
 		}
 
 		mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
@@ -1381,7 +1453,7 @@ private:
 		endSingleTimeCommands(commandBuffer);
 	}
 
-	void createTextureImageView() {
+	void createTextureImageView(VkImageView& textureImageView, VkImage& textureImage) {
 		textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
 	}
 
@@ -1410,7 +1482,7 @@ private:
 		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		samplerInfo.magFilter = VK_FILTER_LINEAR;
 		samplerInfo.minFilter = VK_FILTER_LINEAR;
-		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
 		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
 		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
@@ -1578,6 +1650,11 @@ private:
 	}
 
 	void createDescriptorPools() {
+		createGrassDescriptorPools();
+		createGroundDescriptorPools();
+	}
+
+	void createGrassDescriptorPools() {
 		std::array<VkDescriptorPoolSize, 3> poolSizes{};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1592,24 +1669,49 @@ private:
 		poolInfo.pPoolSizes = poolSizes.data();
 		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &grassDescriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create descriptor pools!");
 		}
 	}
 
+	void createGroundDescriptorPools() {
+		std::array<VkDescriptorPoolSize, 3> poolSizes{};
+		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &groundDescriptorPool) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create ground descriptor pools!");
+		}
+	}
+
 	void createDescriptorSets() {
-		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+		createGrassDescriptorSets();
+		createGroundDescriptorSets();
+	}
+
+	void createGrassDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, grassDescriptorSetLayout);
 
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorPool = grassDescriptorPool;
 		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 		allocInfo.pSetLayouts = layouts.data();
 
-		descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+		grassDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
 
-		if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate descriptor sets!");
+		if (vkAllocateDescriptorSets(device, &allocInfo, grassDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate grass descriptor sets!");
 		}
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1625,13 +1727,13 @@ private:
 
 			VkDescriptorImageInfo imageInfo{};
 			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageInfo.imageView = textureImageView;
+			imageInfo.imageView = grassTextureImageView;
 			imageInfo.sampler = textureSampler;
 
 			std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[0].dstSet = descriptorSets[i];
+			descriptorWrites[0].dstSet = grassDescriptorSets[i];
 			descriptorWrites[0].dstBinding = 0;
 			descriptorWrites[0].dstArrayElement = 0;
 			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1639,7 +1741,7 @@ private:
 			descriptorWrites[0].pBufferInfo = &matrixBufferInfo;
 
 			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[1].dstSet = descriptorSets[i];
+			descriptorWrites[1].dstSet = grassDescriptorSets[i];
 			descriptorWrites[1].dstBinding = 1;
 			descriptorWrites[1].dstArrayElement = 0;
 			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1647,12 +1749,73 @@ private:
 			descriptorWrites[1].pBufferInfo = &grassBufferInfo;
 
 			descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[2].dstSet = descriptorSets[i];
+			descriptorWrites[2].dstSet = grassDescriptorSets[i];
 			descriptorWrites[2].dstBinding = 2;
 			descriptorWrites[2].dstArrayElement = 0;
 			descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrites[2].descriptorCount = 1;
 			descriptorWrites[2].pImageInfo = &imageInfo;
+
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+		}
+	}
+
+	void createGroundDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, groundDescriptorSetLayout);
+
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = groundDescriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
+
+		groundDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+
+		if (vkAllocateDescriptorSets(device, &allocInfo, groundDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate ground descriptor sets!");
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			VkDescriptorBufferInfo matrixBufferInfo{};
+			matrixBufferInfo.buffer = uMatrixBuffers[i];
+			matrixBufferInfo.offset = 0;
+			matrixBufferInfo.range = sizeof(uMatrixBufferObject);
+
+			VkDescriptorImageInfo textureImageInfo{};
+			textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			textureImageInfo.imageView = groundDisplacementTextureImageView;
+			textureImageInfo.sampler = textureSampler;
+
+			VkDescriptorImageInfo displacementImageInfo{};
+			displacementImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			displacementImageInfo.imageView = groundTextureImageView;
+			displacementImageInfo.sampler = textureSampler;
+
+			std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+
+			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet = groundDescriptorSets[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &matrixBufferInfo;
+
+			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet = groundDescriptorSets[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = 1;
+			descriptorWrites[1].pImageInfo = &textureImageInfo;
+
+			descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[2].dstSet = groundDescriptorSets[i];
+			descriptorWrites[2].dstBinding = 2;
+			descriptorWrites[2].dstArrayElement = 0;
+			descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[2].descriptorCount = 1;
+			descriptorWrites[2].pImageInfo = &displacementImageInfo;
 
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
@@ -1718,7 +1881,7 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
 
@@ -1730,7 +1893,7 @@ private:
 
 		vkCmdBindIndexBuffer(commandBuffer, groundIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, groundPipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, groundPipelineLayout, 0, 1, &groundDescriptorSets[currentFrame], 0, nullptr);
 		
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(groundIndices.size()), 1, 0, 0, 0);
 
@@ -2112,10 +2275,18 @@ private:
 		cleanupSwapChain();
 
 		vkDestroySampler(device, textureSampler, nullptr);
-		vkDestroyImageView(device, textureImageView, nullptr);
 
-		vkDestroyImage(device, textureImage, nullptr);
-		vkFreeMemory(device, textureImageMemory, nullptr);
+		vkDestroyImageView(device, grassTextureImageView, nullptr);
+		vkDestroyImage(device, grassTextureImage, nullptr);
+		vkFreeMemory(device, grassTextureImageMemory, nullptr);
+
+		vkDestroyImageView(device, groundTextureImageView, nullptr);
+		vkDestroyImage(device, groundTextureImage, nullptr);
+		vkFreeMemory(device, groundTextureImageMemory, nullptr);
+
+		vkDestroyImageView(device, groundDisplacementTextureImageView, nullptr);
+		vkDestroyImage(device, groundDisplacementTextureImage, nullptr);
+		vkFreeMemory(device, groundDisplacementTextureImageMemory, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, uMatrixBuffers[i], nullptr);
@@ -2129,10 +2300,12 @@ private:
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 
-		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, grassDescriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, groundDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, imGUIDescriptorPool, nullptr);
 
-		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, grassDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, groundDescriptorSetLayout, nullptr);
 
 		vkDestroyBuffer(device, grassIndexBuffer, nullptr);
 		vkFreeMemory(device, grassIndexBufferMemory, nullptr);
@@ -2260,7 +2433,7 @@ private:
 		std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
 		if (!file.is_open()) {
-			throw std::runtime_error("Failed to open file!");
+			throw std::runtime_error("Failed to open file : " + filename);
 		}
 
 		size_t fileSize = (size_t) file.tellg();
