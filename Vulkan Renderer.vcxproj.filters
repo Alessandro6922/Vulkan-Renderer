@@ -61,6 +61,7 @@
     </None>
     <None Include="shaders\groundShader.frag" />
     <None Include="shaders\groundShader.vert" />
+    <None Include="shaders\grassPositionShader.comp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h">
