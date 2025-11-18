@@ -275,6 +275,7 @@ public:
 		initVulkan();
 		initImGui();
 		initGrassBufferParams();
+		generateGrassPositions();
 		mainLoop();
 		cleanup();
 	}
@@ -392,6 +393,8 @@ private:
 
 	GrassParameters grassParameters;
 
+	bool grassPositionsComputed = false;
+
 
 	void initWindow() {
 		// initialise the GLFW library and tell it not to create an openGL context
@@ -480,10 +483,10 @@ private:
 	}
 
 	void initGrassBufferParams() {
-		grassParameters.grassHeight = 0.3f;
+		grassParameters.grassHeight = 2.0f;
 		grassParameters.instancesPerAxis = 100.0f;
 		grassParameters.spacing = 0.05f;
-		grassParameters.bladeThickness = 0.1f;
+		grassParameters.bladeThickness = 0.4f;
 		grassParameters.bezierCPoint1 = glm::vec4(0.0f, 0.75f, 0.0f, 0.0f);
 		grassParameters.bezierCPoint2 = glm::vec4(0.0f, 1.2f, 0.5f, 0.0f);
 		grassParameters.bezierEndPoint = glm::vec4(0.0f, 1.2f, 1.2f, 3.0f);
@@ -573,7 +576,7 @@ private:
 		displacementSamplerLayoutBinding.descriptorCount = 1;
 		displacementSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		displacementSamplerLayoutBinding.pImmutableSamplers = nullptr;
-		displacementSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		displacementSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT;
 
 		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
 		textureSamplerLayoutBinding.binding = 2;
@@ -611,12 +614,12 @@ private:
 		computeShaderStageInfo.module = computeShaderModule;
 		computeShaderStageInfo.pName = "main";
 
-		VkDescriptorSetLayout layouts[] = { grassDescriptorSetLayout, groundDescriptorSetLayout };
+		std::array<VkDescriptorSetLayout, 2> layouts = { grassDescriptorSetLayout, groundDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = layouts;
+		pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+		pipelineLayoutInfo.pSetLayouts = layouts.data();
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &grassPositionComputePipelineLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create grass position compute pipeline layout!");
@@ -1681,7 +1684,7 @@ private:
 	}
 
 	void createGrassPositionBuffers() {
-		VkDeviceSize grassPositionBufferSize = sizeof(uGrassPositionBufferObject);
+		VkDeviceSize grassPositionBufferSize = sizeof(uGrassPositionBufferObject) * GRASS_BLADE_COUNT;
 
 		uGrassPositionBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 		uGrassPositionBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1774,8 +1777,8 @@ private:
 	}
 
 	void createDescriptorSets() {
-		createGrassDescriptorSets();
 		createGroundDescriptorSets();
+		createGrassDescriptorSets();
 	}
 
 	void createGrassDescriptorSets() {
@@ -1807,7 +1810,7 @@ private:
 			VkDescriptorBufferInfo grassPositionBufferInfo{};
 			grassPositionBufferInfo.buffer = uGrassPositionBuffers[i];
 			grassPositionBufferInfo.offset = 0;
-			grassPositionBufferInfo.range = sizeof(uGrassPositionBufferObject);
+			grassPositionBufferInfo.range = VK_WHOLE_SIZE;
 
 			VkDescriptorImageInfo imageInfo{};
 			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1873,15 +1876,15 @@ private:
 			matrixBufferInfo.offset = 0;
 			matrixBufferInfo.range = sizeof(uMatrixBufferObject);
 
-			VkDescriptorImageInfo textureImageInfo{};
-			textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			textureImageInfo.imageView = groundDisplacementTextureImageView;
-			textureImageInfo.sampler = textureSampler;
-
 			VkDescriptorImageInfo displacementImageInfo{};
 			displacementImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			displacementImageInfo.imageView = groundTextureImageView;
+			displacementImageInfo.imageView = groundDisplacementTextureImageView;
 			displacementImageInfo.sampler = textureSampler;
+
+			VkDescriptorImageInfo textureImageInfo{};
+			textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			textureImageInfo.imageView = groundTextureImageView;
+			textureImageInfo.sampler = textureSampler;
 
 			std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
@@ -1899,7 +1902,7 @@ private:
 			descriptorWrites[1].dstArrayElement = 0;
 			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrites[1].descriptorCount = 1;
-			descriptorWrites[1].pImageInfo = &textureImageInfo;
+			descriptorWrites[1].pImageInfo = &displacementImageInfo;
 
 			descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[2].dstSet = groundDescriptorSets[i];
@@ -1907,7 +1910,7 @@ private:
 			descriptorWrites[2].dstArrayElement = 0;
 			descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrites[2].descriptorCount = 1;
-			descriptorWrites[2].pImageInfo = &displacementImageInfo;
+			descriptorWrites[2].pImageInfo = &textureImageInfo;
 
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
@@ -2361,6 +2364,38 @@ private:
 		//if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
 		//	ImGui::UpdatePlatformWindows();
 		//	ImGui::RenderPlatformWindowsDefault();
+		//}
+	}
+
+	void generateGrassPositions() {
+		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+		recordComputeCommandBuffer(commandBuffer);
+
+		endSingleTimeCommands(commandBuffer);
+	}
+
+	void recordComputeCommandBuffer(VkCommandBuffer commandBuffer) {
+		//VkCommandBufferBeginInfo beginInfo{};
+		//beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		//
+		//if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+		//	throw std::runtime_error("Failed to begin recording compute command buffer!");
+		//}
+
+		
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassPositionComputePipeline);
+
+		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			std::array<VkDescriptorSet, 2> descriptorSets = { grassDescriptorSets[i], groundDescriptorSets[i] };
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassPositionComputePipelineLayout, 0, 2, descriptorSets.data(), 0, nullptr);
+			vkCmdDispatch(commandBuffer, GRASS_BLADE_COUNT, 1, 1);
+		}
+
+
+		//if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+		//	throw std::runtime_error("Failed to record compute command buffer!");
 		//}
 	}
 

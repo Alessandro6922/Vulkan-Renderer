@@ -17,9 +17,9 @@ layout(binding = 1) uniform GrassDataBufferObject{
 	vec4 bezierEndPoint;
 } gdbo;
 
-layout(std140, binding = 2) readonly buffer GrassPositionsSSBOIn{
-	vec3 position[];
-};
+layout(std430, binding = 2) readonly buffer GrassPositionsSSBOIn{
+	vec4 position[];
+} ssbo;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColour;
@@ -63,11 +63,13 @@ vec3 instancePos = inPosition;
 	instancePos.z = bezier(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, instancePos.y / gdbo.bezierEndPoint.w).z;
 	instancePos *= vec3(gdbo.bladeThickness, 1.0, 1.0);
 
-	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(gl_InstanceIndex));
+	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w)));
 
-	rotatedPos.x += gdbo.spacing * (gl_InstanceIndex / gdbo.instancesPerAxis);
-	rotatedPos.z += gdbo.spacing * (gl_InstanceIndex % int(gdbo.instancesPerAxis));
+	rotatedPos.x += ssbo.position[gl_InstanceIndex].x;
+	rotatedPos.z += ssbo.position[gl_InstanceIndex].z;
 	rotatedPos.y *= gdbo.grassHeight;
+	rotatedPos.y += ssbo.position[gl_InstanceIndex].y;
+
 	gl_Position = ubo.proj * ubo.view * ubo.model * rotatedPos;
 	fragColour = inColour;
 	fragTexCoord = inTexCoord;

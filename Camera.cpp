@@ -26,7 +26,7 @@ void Camera::update()
 	//glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f)) * rotation;
 
 	glm::mat4 camRot = getRotationMatrix();
-	position += glm::vec3(camRot * glm::vec4(velocity * 0.0005f, 0.0f));
+	position += glm::vec3(camRot * glm::vec4(velocity * 0.005f, 0.0f));
 
 	//viewMatrix = glm::inverse(transform);
 }

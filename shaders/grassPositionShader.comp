@@ -1,16 +1,40 @@
+/*
+    TODO: Add a little random offset to the position controllable through a buffer (just repurpose the spacing variable cause we aint using that anymore fr
+*/
+
 #version 450
 #extension GL_KHR_vulkan_glsl : enable
 
-const int grassCount = 16384;
+const uint grassCount = 16384;
+const uint gridSize = uint(sqrt(grassCount)); // 128
+const uint planeSize = 50; // -25 to 25 in each direction
+const float scalingFactor = float(planeSize) / float(gridSize);
 
-layout(set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
-    vec3 positionsOut[];
-};
+layout(std430, set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
+    vec4 positionsOut[];
+}ssbo;
 
 layout(set = 1, binding = 1) uniform sampler2D displacementSampler;
 
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main(){
+    uint threadID = gl_GlobalInvocationID.x;
+
+    uint gridX = (threadID % gridSize);
+    uint gridZ = (threadID / gridSize);
+
+    vec2 uv = vec2(float(gridX) / float(gridSize), float(gridZ) / float(gridSize));
     
+    int centredX = int(gridX) - 64;
+    int centredZ = int(gridZ) - 64;
+
+    float finalX = float(centredX) * scalingFactor;
+    float finalZ = float(centredZ) * scalingFactor;
+
+    float height = 50 * texture(displacementSampler, uv).g;
+
+    float rotation = threadID; // ill sort this later
+
+    ssbo.positionsOut[threadID] = vec4(finalX, height, finalZ, threadID);
 }
