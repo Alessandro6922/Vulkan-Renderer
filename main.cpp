@@ -268,7 +268,7 @@ struct GrassParameters {
 };
 
 // The program gets wrapped into a class
-class HelloTriangleApplication {
+class VulkanApplication {
 public:
 	void run() {
 		initWindow();
@@ -412,7 +412,7 @@ private:
 	}
 
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		auto app = reinterpret_cast<VulkanApplication*>(glfwGetWindowUserPointer(window));
 		app->framebufferResized = true;
 	}
 
@@ -2588,7 +2588,7 @@ private:
 };
 
 int main() {
-	HelloTriangleApplication app;
+	VulkanApplication app;
 
 	try {
 		app.run();
