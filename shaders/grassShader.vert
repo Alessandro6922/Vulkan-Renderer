@@ -29,6 +29,7 @@ layout(location = 2) in vec2 inTexCoord;
 
 layout(location = 0) out vec3 fragColour;
 layout(location = 1) out vec2 fragTexCoord;
+layout(location = 2) out vec3 normalOut;
 
 // https://gist.github.com/yiwenl/bb87c2d7df8bc735dab017c808a381ab
 // two point bezier curve function
@@ -86,9 +87,10 @@ vec3 instancePos = inPosition;
 	//vec3 directionTwo = vec3(1,0,0);
 	//vec3 normal = 
 	instancePos *= vec3(gdbo.bladeThickness, 1.0, 1.0);
-	instancePos += ((normalize(normal) * (sin((gdbo.elapsedTime + (instancePos.y / gdbo.bezierEndPoint.w) * 3.0) * 1.0)) - 0.5) * (instancePos.y / gdbo.bezierEndPoint.w) * 4 * texture(noiseSampler, vec2(ssbo.position[gl_InstanceIndex].x / 100.0 + gdbo.elapsedTime / 50.0, ssbo.position[gl_InstanceIndex].z / 100.0 + gdbo.elapsedTime / 50.0)).g);
+	instancePos += ((normalize(normal) * (sin((gdbo.elapsedTime + (instancePos.y / gdbo.bezierEndPoint.w) * 3.0 + gl_InstanceIndex) * 1.0)) - 0.5) * (instancePos.y / gdbo.bezierEndPoint.w) * 4 * texture(noiseSampler, vec2(ssbo.position[gl_InstanceIndex].x / 100.0 + gdbo.elapsedTime / 50.0, ssbo.position[gl_InstanceIndex].z / 100.0 + gdbo.elapsedTime / 50.0)).g);
 
 	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w)));
+	normalOut = normalize(rotateAroundYAxis(vec4(normal, 0.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w))).xyz);
 
 	rotatedPos.x += ssbo.position[gl_InstanceIndex].x;
 	rotatedPos.z += ssbo.position[gl_InstanceIndex].z;

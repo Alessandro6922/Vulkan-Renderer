@@ -50,7 +50,7 @@ void main(){
 
     float sampledRotation = texture(noiseSampler, uv).r * 360.0; // ill sort this later
 
-    float windDirectionAngle = 0.0;
+    float windDirectionAngle = 6.0;
 
     float rotation = mix(mix(randomRotation, sampledRotation, 0.3), windDirectionAngle, 0.8);
 
