@@ -1,6 +1,11 @@
 /*
 TODO:
-	finish compute shader for grass points
+	Add skybox (see : https://satellitnorden.wordpress.com/2018/01/23/vulkan-adventures-cube-map-tutorial/)
+	Light everything according to the skybox to create a realistic environment
+	Sort the wind:
+		Tune parameters
+		Change bezier to be off a single control point so its hopefully less weird
+		fix the grass growing and shrinking hopefully by doing stuff with the previous 2 points
 	look into geometry shader for culling and lods
 	also look into draw indirect for lods again and other stuff idk
 */
@@ -48,14 +53,22 @@ const uint32_t HEIGHT = 1200;
 const std::string HIGH_LOD_MODEL_PATH = "Resources/Models/grassBladeHigh.obj";
 const std::string LOW_LOD_MODEL_PATH = "Resources/Models/grassBladeLow.obj";
 const std::string GROUND_MODEL_PATH = "Resources/Models/groundPlane.obj";
+const std::string BOX_MODEL_PATH = "Resources/Models/skybox.obj";
 
 const std::string GRASS_TEXTURE_PATH = "Resources/Textures/grass.png";
 const std::string GROUND_TEXTURE_PATH = "Resources/Textures/grassFlat.jpg";
 const std::string GROUND_DISPLACEMENT_TEXTURE_PATH = "Resources/Textures/groundDisplacement.png";
+const std::string GRASS_ROTATION_NOISE_TEXTURE_PATH = "Resources/Textures/grassRotationNoise.png";
+const std::string CUBEMAP_FRONT_TEXTURE_PATH = "Resources/Textures/cubeMapFront.png";
+const std::string CUBEMAP_BACK_TEXTURE_PATH = "Resources/Textures/cubeMapBack.png";
+const std::string CUBEMAP_LEFT_TEXTURE_PATH = "Resources/Textures/cubeMapLeft.png";
+const std::string CUBEMAP_RIGHT_TEXTURE_PATH = "Resources/Textures/cubeMapRight.png";
+const std::string CUBEMAP_TOP_TEXTURE_PATH = "Resources/Textures/cubeMapTop.png";
+const std::string CUBEMAP_BOTTOM_TEXTURE_PATH = "Resources/Textures/cubeMapBottom.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const int GRASS_BLADE_COUNT = 16384;
+const int GRASS_BLADE_COUNT = 1638400;
 
 Camera camera;
 
@@ -248,7 +261,7 @@ struct uGrassPositionBufferObject {
 };
 
 struct uGrassBufferObject {
-	float instancesPerAxis;
+	float elapsedTime;
 	float spacing;
 	float grassHeight;
 	float bladeThickness;
@@ -258,7 +271,7 @@ struct uGrassBufferObject {
 };
 
 struct GrassParameters {
-	float instancesPerAxis;
+	float elapsedTime;
 	float spacing;
 	float grassHeight;
 	float bladeThickness;
@@ -319,6 +332,10 @@ private:
 	VkPipelineLayout groundPipelineLayout;
 	VkPipeline groundGraphicsPipeline;
 
+	VkDescriptorSetLayout skyboxDescriptorSetLayout;
+	VkPipelineLayout skyboxPipelineLayout;
+	VkPipeline skyboxGraphicsPipeline;
+
 	std::vector<VkFramebuffer> swapChainFrameBuffers;
 
 	VkCommandPool commandPool;
@@ -328,7 +345,7 @@ private:
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	std::vector<VkFence> inFlightFences;
 
-	bool framebufferResized = false;
+	bool frameBufferResized = false;
 
 	uint32_t currentFrame = 0;
 
@@ -345,6 +362,13 @@ private:
 	std::vector<uint32_t> groundIndices;
 	VkBuffer groundIndexBuffer;
 	VkDeviceMemory groundIndexBufferMemory;
+
+	std::vector<Vertex> skyboxVertices;
+	VkBuffer skyboxVertexBuffer;
+	VkDeviceMemory skyboxVertexBufferMemory;
+	std::vector<uint32_t> skyboxIndices;
+	VkBuffer skyboxIndexBuffer;
+	VkDeviceMemory skyboxIndexBufferMemory;
 
 	std::vector<VkBuffer> uMatrixBuffers;
 	std::vector<VkDeviceMemory> uMatrixBuffersMemory;
@@ -364,6 +388,9 @@ private:
 	VkDescriptorPool groundDescriptorPool;
 	std::vector<VkDescriptorSet> groundDescriptorSets;
 
+	VkDescriptorPool skyboxDescriptorPool;
+	std::vector<VkDescriptorSet> skyboxDescriptorSets;
+
 	VkDescriptorPool imGUIDescriptorPool;
 
 	uint32_t mipLevels;
@@ -380,6 +407,14 @@ private:
 	VkDeviceMemory groundDisplacementTextureImageMemory;
 	VkImageView groundDisplacementTextureImageView;
 
+	VkImage grassRotationNoiseTextureImage;
+	VkDeviceMemory grassRotationNoiseTextureImageMemory;
+	VkImageView grassRotationNoiseTextureImageView;
+
+	VkImage skyboxImage;
+	VkDeviceMemory skyboxImageMemory;
+	VkImageView skyboxImageView;
+
 	VkSampler textureSampler;
 
 	VkImage depthImage;
@@ -393,7 +428,10 @@ private:
 
 	GrassParameters grassParameters;
 
-	bool grassPositionsComputed = false;
+	float currentFrameTime = 0;
+	float lastFrameTime = 0;
+	float elapsedTime;
+	float dt;
 
 
 	void initWindow() {
@@ -413,7 +451,7 @@ private:
 
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
 		auto app = reinterpret_cast<VulkanApplication*>(glfwGetWindowUserPointer(window));
-		app->framebufferResized = true;
+		app->frameBufferResized = true;
 	}
 
 	void createImGuiDescriptorPool() {
@@ -484,7 +522,7 @@ private:
 
 	void initGrassBufferParams() {
 		grassParameters.grassHeight = 2.0f;
-		grassParameters.instancesPerAxis = 100.0f;
+		grassParameters.elapsedTime = 0.0f;
 		grassParameters.spacing = 0.05f;
 		grassParameters.bladeThickness = 0.4f;
 		grassParameters.bezierCPoint1 = glm::vec4(0.0f, 0.75f, 0.0f, 0.0f);
@@ -520,6 +558,7 @@ private:
 	void createDescriptorSetLayouts() {
 		createGrassDescriptorSetLayout();
 		createGroundDescriptorSetLayout();
+		createSkyboxDescriptorSetLayout();
 	}
 
 	void createGrassDescriptorSetLayout() {
@@ -544,14 +583,21 @@ private:
 		uGrassPositionLayoutBinding.pImmutableSamplers = nullptr;
 		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
 
-		VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-		samplerLayoutBinding.binding = 3;
-		samplerLayoutBinding.descriptorCount = 1;
-		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		samplerLayoutBinding.pImmutableSamplers = nullptr;
-		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
+		textureSamplerLayoutBinding.binding = 3;
+		textureSamplerLayoutBinding.descriptorCount = 1;
+		textureSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		textureSamplerLayoutBinding.pImmutableSamplers = nullptr;
+		textureSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-		std::array<VkDescriptorSetLayoutBinding, 4> bindings = { uMatrixLayoutBinding, uGrassLayoutBinding, uGrassPositionLayoutBinding, samplerLayoutBinding };
+		VkDescriptorSetLayoutBinding noiseSamplerLayoutBinding{};
+		noiseSamplerLayoutBinding.binding = 4;
+		noiseSamplerLayoutBinding.descriptorCount = 1;
+		noiseSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		noiseSamplerLayoutBinding.pImmutableSamplers = nullptr;
+		noiseSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 5> bindings = { uMatrixLayoutBinding, uGrassLayoutBinding, uGrassPositionLayoutBinding, textureSamplerLayoutBinding, noiseSamplerLayoutBinding };
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -597,10 +643,38 @@ private:
 		}
 	}
 
+	void createSkyboxDescriptorSetLayout() {
+		VkDescriptorSetLayoutBinding uMatrixLayoutBinding{};
+		uMatrixLayoutBinding.binding = 0;
+		uMatrixLayoutBinding.descriptorCount = 1;
+		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
+		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
+		textureSamplerLayoutBinding.binding = 1;
+		textureSamplerLayoutBinding.descriptorCount = 1;
+		textureSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		textureSamplerLayoutBinding.pImmutableSamplers = nullptr;
+		textureSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uMatrixLayoutBinding, textureSamplerLayoutBinding };
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &skyboxDescriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create skybox descriptor set layouts!");
+		}
+	}
+
 	void createPipelines() {
 		createGrassGraphicsPipeline();
 		createGroundGraphicsPipeline();
 		createGrassPositionComputePipeline();
+		createSkyboxGraphicsPipeline();
 	}
 
 	void createGrassPositionComputePipeline() {
@@ -945,6 +1019,160 @@ private:
 		vkDestroyShaderModule(device, fragShaderModule, nullptr);
 	}
 
+	void createSkyboxGraphicsPipeline() {
+
+		auto vertShaderCode = readFile("shaders/skyboxVert.spv");
+		auto fragShaderCode = readFile("shaders/skyboxFrag.spv");
+
+		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertShaderStageInfo.module = vertShaderModule;
+		vertShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragShaderStageInfo.module = fragShaderModule;
+		fragShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+		auto bindingDescription = Vertex::getBindingDescription();
+		auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertexInputInfo.vertexBindingDescriptionCount = 1;
+		vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+		vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+		VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float)swapChainExtent.width;
+		viewport.height = (float)swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = swapChainExtent;
+
+		VkPipelineViewportStateCreateInfo viewportState{};
+		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewportState.viewportCount = 1;
+		viewportState.scissorCount = 1;
+
+		VkPipelineRasterizationStateCreateInfo rasterizer{};
+		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rasterizer.depthClampEnable = VK_FALSE;
+		rasterizer.rasterizerDiscardEnable = VK_FALSE;
+		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizer.lineWidth = 1.0f;
+		rasterizer.cullMode = VK_CULL_MODE_NONE;
+		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasterizer.depthBiasEnable = VK_FALSE;
+		rasterizer.depthBiasConstantFactor = 0.0f;
+		rasterizer.depthBiasClamp = 0.0f;
+		rasterizer.depthBiasSlopeFactor = 0.0f;
+
+		VkPipelineMultisampleStateCreateInfo multisampling{};
+		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		multisampling.sampleShadingEnable = VK_FALSE;
+		multisampling.rasterizationSamples = msaaSamples;
+		multisampling.minSampleShading = 1.0f;
+		multisampling.pSampleMask = nullptr;
+		multisampling.alphaToCoverageEnable = VK_FALSE;
+		multisampling.alphaToOneEnable = VK_FALSE;
+
+		VkPipelineDepthStencilStateCreateInfo depthStencil{};
+		depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencil.depthTestEnable = VK_TRUE;
+		depthStencil.depthWriteEnable = VK_TRUE;
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+		depthStencil.depthBoundsTestEnable = VK_FALSE;
+		depthStencil.minDepthBounds = 0.0f;
+		depthStencil.maxDepthBounds = 1.0f;
+		depthStencil.stencilTestEnable = VK_FALSE;
+
+		VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		colorBlendAttachment.blendEnable = VK_FALSE;
+		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+		VkPipelineColorBlendStateCreateInfo colorBlending{};
+		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		colorBlending.logicOpEnable = VK_FALSE;
+		colorBlending.logicOp = VK_LOGIC_OP_COPY;
+		colorBlending.attachmentCount = 1;
+		colorBlending.pAttachments = &colorBlendAttachment;
+		colorBlending.blendConstants[0] = 0.0f;
+		colorBlending.blendConstants[1] = 0.0f;
+		colorBlending.blendConstants[2] = 0.0f;
+		colorBlending.blendConstants[3] = 0.0f;
+
+		std::vector<VkDynamicState> dynamicStates = {
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR
+		};
+
+		VkPipelineDynamicStateCreateInfo dynamicState{};
+		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		dynamicState.pDynamicStates = dynamicStates.data();
+
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts = &skyboxDescriptorSetLayout;
+		pipelineLayoutInfo.pushConstantRangeCount = 0;
+		pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &skyboxPipelineLayout) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create Skybox pipeline layout!");
+		}
+
+		VkGraphicsPipelineCreateInfo pipelineInfo{};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipelineInfo.stageCount = 2;
+		pipelineInfo.pStages = shaderStages;
+		pipelineInfo.pVertexInputState = &vertexInputInfo;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisampling;
+		pipelineInfo.pDepthStencilState = &depthStencil;
+		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.pDynamicState = &dynamicState;
+		pipelineInfo.layout = skyboxPipelineLayout;
+		pipelineInfo.renderPass = renderPass;
+		pipelineInfo.subpass = 0;
+		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+		pipelineInfo.basePipelineIndex = -1;
+
+		if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &skyboxGraphicsPipeline) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create skybox graphics pipeline!");
+		}
+
+		vkDestroyShaderModule(device, vertShaderModule, nullptr);
+		vkDestroyShaderModule(device, fragShaderModule, nullptr);
+	}
+
 	VkShaderModule createShaderModule(const std::vector<char>& code) {
 		VkShaderModuleCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1248,6 +1476,10 @@ private:
 		loadModel(GROUND_MODEL_PATH, groundVertices, groundIndices);
 		createVertexBuffer(groundVertices, groundVertexBuffer, groundVertexBufferMemory);
 		createIndexBuffer(groundIndices, groundIndexBuffer, groundIndexBufferMemory);
+
+		loadModel(BOX_MODEL_PATH, skyboxVertices, skyboxIndices);
+		createVertexBuffer(skyboxVertices, skyboxVertexBuffer, skyboxVertexBufferMemory);
+		createIndexBuffer(skyboxIndices, skyboxIndexBuffer, skyboxIndexBufferMemory);
 	}
 
 	void loadModel(std::string modelPath, std::vector<Vertex>& vertexBuffer, std::vector<uint32_t>& indexBuffer) {
@@ -1376,6 +1608,12 @@ private:
 
 		createTextureImage(GROUND_DISPLACEMENT_TEXTURE_PATH, groundDisplacementTextureImage, groundDisplacementTextureImageMemory);
 		createTextureImageView(groundDisplacementTextureImageView, groundDisplacementTextureImage);
+
+		createTextureImage(GRASS_ROTATION_NOISE_TEXTURE_PATH, grassRotationNoiseTextureImage, grassRotationNoiseTextureImageMemory);
+		createTextureImageView(grassRotationNoiseTextureImageView, grassRotationNoiseTextureImage);
+
+		createTextureCubeMapImage(skyboxImage, skyboxImageMemory);
+		createTextureCubeMapImageView(skyboxImageView, skyboxImage);
 	}
 
 	void createTextureImage(std::string imagePath, VkImage& textureImage, VkDeviceMemory& textureImageMemory) {
@@ -1411,6 +1649,58 @@ private:
 		generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
 	}
 
+	void createTextureCubeMapImage(VkImage& textureImage, VkDeviceMemory& textureImageMemory) {
+		int texWidth, texHeight, texChannels;
+
+		stbi_uc* pixels[6];
+		pixels[0] = stbi_load(CUBEMAP_FRONT_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[1] = stbi_load(CUBEMAP_BACK_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[2] = stbi_load(CUBEMAP_TOP_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[3] = stbi_load(CUBEMAP_BOTTOM_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[4] = stbi_load(CUBEMAP_LEFT_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[5] = stbi_load(CUBEMAP_RIGHT_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		VkDeviceSize imageSize = texWidth * texHeight * 4 * 6;
+		VkDeviceSize layerSize = imageSize / 6;
+
+		for (int i = 0; i < 6; ++i)
+		{
+			if (!pixels[i]) {
+				throw std::runtime_error("Failed to load cubemap image : " + std::to_string(i));
+			}
+		}
+
+
+		mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+		createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+		void* data;
+		vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+
+		for (int i = 0; i < 6; ++i)
+		{
+			memcpy(static_cast<uint8_t*>(data) + (layerSize * i), pixels[i], static_cast<size_t>(layerSize));
+		}
+
+		vkUnmapMemory(device, stagingBufferMemory);
+
+		for (int i = 0; i < 6; i++) {
+			stbi_image_free(pixels[i]);
+		}
+
+		createCubeMapImage(texWidth, texHeight, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+		transitionCubeMapImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
+		copyBufferToCubeMapImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+		// transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+		//generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+	}
+
 	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
 		VkImageCreateInfo imageInfo{};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1427,6 +1717,42 @@ private:
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		imageInfo.samples = numSamples;
 		imageInfo.flags = 0;
+
+		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create image!");
+		}
+
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+		if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allcoate image memory");
+		}
+
+		vkBindImageMemory(device, image, imageMemory, 0);
+	}
+
+	void createCubeMapImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = width;
+		imageInfo.extent.height = height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = mipLevels;
+		imageInfo.arrayLayers = 6;
+		imageInfo.format = format;
+		imageInfo.tiling = tiling;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = usage;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.samples = numSamples;
+		imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
 		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create image!");
@@ -1489,6 +1815,48 @@ private:
 		endSingleTimeCommands(commandbuffer);
 	}
 
+	void transitionCubeMapImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
+		VkCommandBuffer commandbuffer = beginSingleTimeCommands();
+
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout = oldLayout;
+		barrier.newLayout = newLayout;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.image = image;
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.baseMipLevel = 0;
+		barrier.subresourceRange.levelCount = mipLevels;
+		barrier.subresourceRange.baseArrayLayer = 0;
+		barrier.subresourceRange.layerCount = 6;
+
+		VkPipelineStageFlags sourceStage;
+		VkPipelineStageFlags destinationStage;
+
+		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		}
+		else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		else {
+			throw std::invalid_argument("Unsupported layout transition!");
+		}
+
+		vkCmdPipelineBarrier(commandbuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+		endSingleTimeCommands(commandbuffer);
+	}
+
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
 		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -1501,6 +1869,27 @@ private:
 		region.imageSubresource.mipLevel = 0;
 		region.imageSubresource.baseArrayLayer = 0;
 		region.imageSubresource.layerCount = 1;
+
+		region.imageOffset = { 0, 0, 0 };
+		region.imageExtent = { width, height, 1 };
+
+		vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+		endSingleTimeCommands(commandBuffer);
+	}
+
+	void copyBufferToCubeMapImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+		VkBufferImageCopy region{};
+		region.bufferOffset = 0;
+		region.bufferRowLength = 0;
+		region.bufferImageHeight = 0;
+
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.mipLevel = 0;
+		region.imageSubresource.baseArrayLayer = 0;
+		region.imageSubresource.layerCount = 6;
 
 		region.imageOffset = { 0, 0, 0 };
 		region.imageExtent = { width, height, 1 };
@@ -1525,6 +1914,30 @@ private:
 		viewInfo.subresourceRange.levelCount = mipLevels;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
 		viewInfo.subresourceRange.layerCount = 1;
+
+		VkImageView imageView;
+		if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create image view!");
+		}
+
+		return imageView;
+	}
+
+	void createTextureCubeMapImageView(VkImageView& textureImageView, VkImage& textureImage) {
+		textureImageView = createCubeMapImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+	}
+
+	VkImageView createCubeMapImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlag, uint32_t mipLevels) {
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = image;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		viewInfo.format = format;
+		viewInfo.subresourceRange.aspectMask = aspectFlag;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = mipLevels;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 6;
 
 		VkImageView imageView;
 		if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
@@ -1711,14 +2124,14 @@ private:
 		uMatrixBufferObject ubo{};
 		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		//ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(70.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 1000.0f);
+		ubo.proj = glm::perspective(glm::radians(70.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10000.0f);
 		ubo.proj[1][1] *= -1; // flip render for vulkan
 		ubo.view = camera.getViewMatrix();
 
 		memcpy(uMatrixBuffersMapped[currentImage], &ubo, sizeof(ubo));
 
 		uGrassBufferObject gbo{};
-		gbo.instancesPerAxis = grassParameters.instancesPerAxis;
+		gbo.elapsedTime = elapsedTime;
 		gbo.spacing = grassParameters.spacing;
 		gbo.grassHeight = grassParameters.grassHeight;
 		gbo.bladeThickness = grassParameters.bladeThickness;
@@ -1732,10 +2145,11 @@ private:
 	void createDescriptorPools() {
 		createGrassDescriptorPools();
 		createGroundDescriptorPools();
+		createSkyboxDescriptorPools();
 	}
 
 	void createGrassDescriptorPools() {
-		std::array<VkDescriptorPoolSize, 4> poolSizes{};
+		std::array<VkDescriptorPoolSize, 5> poolSizes{};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1744,6 +2158,8 @@ private:
 		poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 		poolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		poolSizes[3].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[4].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[4].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1776,9 +2192,28 @@ private:
 		}
 	}
 
+	void createSkyboxDescriptorPools() {
+		std::array<VkDescriptorPoolSize, 2> poolSizes{};
+		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &skyboxDescriptorPool) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create skybox descriptor pools!");
+		}
+	}
+
 	void createDescriptorSets() {
 		createGroundDescriptorSets();
 		createGrassDescriptorSets();
+		createSkyboxDescriptorSets();
 	}
 
 	void createGrassDescriptorSets() {
@@ -1812,12 +2247,17 @@ private:
 			grassPositionBufferInfo.offset = 0;
 			grassPositionBufferInfo.range = VK_WHOLE_SIZE;
 
-			VkDescriptorImageInfo imageInfo{};
-			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageInfo.imageView = grassTextureImageView;
-			imageInfo.sampler = textureSampler;
+			VkDescriptorImageInfo textureImageInfo{};
+			textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			textureImageInfo.imageView = grassTextureImageView;
+			textureImageInfo.sampler = textureSampler;
 
-			std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+			VkDescriptorImageInfo noiseImageInfo{};
+			noiseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			noiseImageInfo.imageView = grassRotationNoiseTextureImageView;
+			noiseImageInfo.sampler = textureSampler;
+
+			std::array<VkWriteDescriptorSet, 5> descriptorWrites{};
 
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[0].dstSet = grassDescriptorSets[i];
@@ -1849,7 +2289,15 @@ private:
 			descriptorWrites[3].dstArrayElement = 0;
 			descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrites[3].descriptorCount = 1;
-			descriptorWrites[3].pImageInfo = &imageInfo;
+			descriptorWrites[3].pImageInfo = &textureImageInfo;
+
+			descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[4].dstSet = grassDescriptorSets[i];
+			descriptorWrites[4].dstBinding = 4;
+			descriptorWrites[4].dstArrayElement = 0;
+			descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[4].descriptorCount = 1;
+			descriptorWrites[4].pImageInfo = &noiseImageInfo;
 
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
@@ -1916,6 +2364,54 @@ private:
 		}
 	}
 
+	void createSkyboxDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, skyboxDescriptorSetLayout);
+
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = skyboxDescriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
+
+		skyboxDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+
+		if (vkAllocateDescriptorSets(device, &allocInfo, skyboxDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate skybox descriptor sets!");
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			VkDescriptorBufferInfo matrixBufferInfo{};
+			matrixBufferInfo.buffer = uMatrixBuffers[i];
+			matrixBufferInfo.offset = 0;
+			matrixBufferInfo.range = sizeof(uMatrixBufferObject);
+
+			VkDescriptorImageInfo textureImageInfo{};
+			textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			textureImageInfo.imageView = skyboxImageView;
+			textureImageInfo.sampler = textureSampler;
+
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet = skyboxDescriptorSets[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &matrixBufferInfo;
+
+			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet = skyboxDescriptorSets[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = 1;
+			descriptorWrites[1].pImageInfo = &textureImageInfo;
+
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+		}
+	}
+
 	void createCommandBuffers() {
 		commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -1956,7 +2452,7 @@ private:
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
 
-		VkBuffer vertexBuffers[] = { grassVertexBuffer, groundVertexBuffer };
+		VkBuffer vertexBuffers[] = { grassVertexBuffer, groundVertexBuffer, skyboxVertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
 
@@ -1991,6 +2487,17 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, groundPipelineLayout, 0, 1, &groundDescriptorSets[currentFrame], 0, nullptr);
 		
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(groundIndices.size()), 1, 0, 0, 0);
+
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxGraphicsPipeline);
+
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[2], offsets);
+
+		vkCmdBindIndexBuffer(commandBuffer, skyboxIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipelineLayout, 0, 1, &skyboxDescriptorSets[currentFrame], 0, nullptr);
+
+		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(skyboxIndices.size()), 1, 0, 0, 0);
 
 		imGuiRender(commandBuffer);
 
@@ -2260,10 +2767,16 @@ private:
 	void mainLoop() {
 		// while the window is open
 		while (!glfwWindowShouldClose(window)) {
+			currentFrameTime = static_cast<float>(glfwGetTime());
+			dt = currentFrameTime - lastFrameTime;
+			elapsedTime += dt;
+
 			// check for events
 			glfwPollEvents();
-			camera.update();
+			camera.update(dt);
 			drawFrame();
+
+			lastFrameTime = currentFrameTime;
 		}
 
 		vkDeviceWaitIdle(device);
@@ -2323,7 +2836,7 @@ private:
 
 		result = vkQueuePresentKHR(presentationQueue, &presentInfo);
 
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || frameBufferResized) {
 			recreateSwapChain();
 		}
 		else if (result != VK_SUCCESS) {
@@ -2346,7 +2859,6 @@ private:
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::Text("Position: %.3f %.3f %.3f", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
 		ImGui::Text("Yaw: %.3f Pitch: %.3f", camera.getYaw(), camera.getPitch());
-		ImGui::SliderFloat("Blades per axis", &grassParameters.instancesPerAxis, 100.0f, 1000.0f, "%1.0f");
 		ImGui::SliderFloat("Spacing", &grassParameters.spacing, 0.01f, 1.0f);
 		ImGui::SliderFloat("Grass height", &grassParameters.grassHeight, 0.1f, 5.0f);
 		ImGui::SliderFloat("Blade thickness", &grassParameters.bladeThickness, 0.1f, 1.0f);
@@ -2416,6 +2928,10 @@ private:
 		vkDestroyImage(device, groundDisplacementTextureImage, nullptr);
 		vkFreeMemory(device, groundDisplacementTextureImageMemory, nullptr);
 
+		vkDestroyImageView(device, grassRotationNoiseTextureImageView, nullptr);
+		vkDestroyImage(device, grassRotationNoiseTextureImage, nullptr);
+		vkFreeMemory(device, grassRotationNoiseTextureImageMemory, nullptr);
+
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, uMatrixBuffers[i], nullptr);
 			vkFreeMemory(device, uMatrixBuffersMemory[i], nullptr);
@@ -2433,10 +2949,12 @@ private:
 
 		vkDestroyDescriptorPool(device, grassDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, groundDescriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, skyboxDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, imGUIDescriptorPool, nullptr);
 
 		vkDestroyDescriptorSetLayout(device, grassDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, groundDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, skyboxDescriptorSetLayout, nullptr);
 
 		vkDestroyBuffer(device, grassIndexBuffer, nullptr);
 		vkFreeMemory(device, grassIndexBufferMemory, nullptr);
@@ -2450,12 +2968,20 @@ private:
 		vkDestroyBuffer(device, groundVertexBuffer, nullptr);
 		vkFreeMemory(device, groundVertexBufferMemory, nullptr);
 
+		vkDestroyBuffer(device, skyboxIndexBuffer, nullptr);
+		vkFreeMemory(device, skyboxIndexBufferMemory, nullptr);
+
+		vkDestroyBuffer(device, skyboxVertexBuffer, nullptr);
+		vkFreeMemory(device, skyboxVertexBufferMemory, nullptr);
+
 		vkDestroyPipeline(device, grassGraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(device, grassPipelineLayout, nullptr);
 		vkDestroyPipeline(device, grassPositionComputePipeline, nullptr);
 		vkDestroyPipelineLayout(device, grassPositionComputePipelineLayout, nullptr);
 		vkDestroyPipeline(device, groundGraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(device, groundPipelineLayout, nullptr);
+		vkDestroyPipeline(device, skyboxGraphicsPipeline, nullptr);
+		vkDestroyPipelineLayout(device, skyboxPipelineLayout, nullptr);
 
 		vkDestroyRenderPass(device, renderPass, nullptr);
 

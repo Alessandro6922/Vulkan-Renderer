@@ -160,6 +160,8 @@
     <None Include="shaders\grassShader.vert" />
     <None Include="shaders\groundShader.frag" />
     <None Include="shaders\groundShader.vert" />
+    <None Include="shaders\skyboxShader.frag" />
+    <None Include="shaders\skyboxShader.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />

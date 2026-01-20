@@ -11,7 +11,7 @@ public:
 	Camera();
 	~Camera();
 
-	void update();
+	void update(float dt);
 	void updateRotation(float changeX, float changeY);
 
 	void setVelocity(glm::vec3 newVelocity);

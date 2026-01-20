@@ -8,7 +8,7 @@ layout(binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(binding = 1) uniform GrassDataBufferObject{
-	float instancesPerAxis;
+	float elapsedTime;
 	float spacing;
 	float grassHeight;
 	float bladeThickness;
@@ -20,6 +20,8 @@ layout(binding = 1) uniform GrassDataBufferObject{
 layout(std430, binding = 2) readonly buffer GrassPositionsSSBOIn{
 	vec4 position[];
 } ssbo;
+
+layout(binding = 4) uniform sampler2D noiseSampler;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColour;
@@ -44,6 +46,18 @@ vec3 bezier(vec3 A, vec3 B, vec3 C, vec3 D, float t) {
   return P;
 }
 
+vec3 bezierDerivative(vec3 A, vec3 B, vec3 C, vec3 D, float t)
+{
+    float u = 1.0 - t;
+    return 3.0 * (
+        u*u * (B - A) +
+        2.0*u*t * (C - B) +
+        t*t * (D - C)
+    );
+}
+
+// Writing this comment like a month after adding this function but if i remember right i took
+// it from a unity forum post talking about how its a built in unity function i believe
 vec4 rotateAroundYAxis(vec4 vertexPos, float deg){
 	float alpha = deg * 3.1415 / 180;
 	float sinA = sin(alpha);
@@ -60,8 +74,19 @@ float randomAngle(int instanceIndex){
 
 void main() {
 vec3 instancePos = inPosition;
+
+	//gdbo.bezierEndPoint.y = texture(noiseSampler, ).r;
+
 	instancePos.z = bezier(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, instancePos.y / gdbo.bezierEndPoint.w).z;
+	//vec3 secondPoint = instancePos;
+	//secondPoint.z = bezier(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, (instancePos.y / gdbo.bezierEndPoint.w) - 0.02).z;
+
+	vec3 derivative = bezierDerivative(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, instancePos.y / gdbo.bezierEndPoint.w);
+	vec3 normal = cross(normalize(derivative), vec3(1,0,0));
+	//vec3 directionTwo = vec3(1,0,0);
+	//vec3 normal = 
 	instancePos *= vec3(gdbo.bladeThickness, 1.0, 1.0);
+	instancePos += ((normalize(normal) * (sin((gdbo.elapsedTime + (instancePos.y / gdbo.bezierEndPoint.w) * 3.0) * 1.0)) - 0.5) * (instancePos.y / gdbo.bezierEndPoint.w) * 4 * texture(noiseSampler, vec2(ssbo.position[gl_InstanceIndex].x / 100.0 + gdbo.elapsedTime / 50.0, ssbo.position[gl_InstanceIndex].z / 100.0 + gdbo.elapsedTime / 50.0)).g);
 
 	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w)));
 
