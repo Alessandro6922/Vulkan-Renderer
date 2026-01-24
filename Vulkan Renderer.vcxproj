@@ -155,6 +155,7 @@
     <ClCompile Include="Renderer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\grassMesh.mesh" />
     <None Include="shaders\grassPositionShader.comp" />
     <None Include="shaders\grassShader.frag" />
     <None Include="shaders\grassShader.vert" />

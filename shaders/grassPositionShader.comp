@@ -2,8 +2,7 @@
     TODO: Add a little random offset to the position controllable through a buffer (just repurpose the spacing variable cause we aint using that anymore fr
 */
 
-#version 450
-#extension GL_KHR_vulkan_glsl : enable
+#version 460
 
 const uint grassCount = 1638400;
 const uint gridSize = uint(sqrt(grassCount)); // 128

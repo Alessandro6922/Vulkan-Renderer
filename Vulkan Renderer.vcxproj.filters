@@ -64,6 +64,7 @@
     <None Include="shaders\grassPositionShader.comp" />
     <None Include="shaders\skyboxShader.vert" />
     <None Include="shaders\skyboxShader.frag" />
+    <None Include="shaders\grassMesh.mesh" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h">
