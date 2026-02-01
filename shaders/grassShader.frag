@@ -16,6 +16,7 @@ void main() {
 //		surfaceNormal = -surfaceNormal;
 //	}
 	vec4 texColour = texture(texSampler, fragTexCoord);
-	outColour = vec4(texColour.xyz * vec3(0.25, 0.2, 0.35), 1.0f) * 0.3;
+	//outColour = vec4(texColour.xyz * vec3(0.25, 0.2, 0.35), 1.0f) * 0.3;
+	outColour = vec4(texColour.xyz, 1.0f);
 	//outColour = vec4(surfaceNormal, 1.0f);
 }

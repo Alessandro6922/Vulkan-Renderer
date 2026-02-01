@@ -1,6 +1,13 @@
 #version 460
 #extension GL_EXT_mesh_shader : enable
 
+layout(binding = 0) uniform UniformBufferObject {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+} ubo;
+
+
 layout(location = 0) out vec3 fragColour[];
 layout(location = 1) out vec2 fragTexCoord[];
 layout(location = 2) out vec3 normal[];
@@ -11,8 +18,8 @@ layout(max_vertices = 128, max_primitives = 16) out;
 void main(){
 	SetMeshOutputsEXT(3, 1);
 
-	gl_MeshVerticesEXT[0].gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-	gl_MeshVerticesEXT[1].gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-	gl_MeshVerticesEXT[2].gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+	gl_MeshVerticesEXT[0].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(-25.0, -25.0, 0.0, 1.0);
+	gl_MeshVerticesEXT[1].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(0.0, 25.0, 0.0, 1.0);
+	gl_MeshVerticesEXT[2].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(25.0, -25.0, 0.0, 1.0);
 	gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
 }

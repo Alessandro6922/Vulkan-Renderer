@@ -444,6 +444,8 @@ private:
 
 	GrassParameters grassParameters;
 
+	PFN_vkCmdDrawMeshTasksEXT cmdDrawMeshTasksEXT = NULL;
+
 	float currentFrameTime = 0;
 	float lastFrameTime = 0;
 	float elapsedTime;
@@ -553,6 +555,7 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
+		loadRequiredFunctions();
 		createSwapChain();
 		createImageViews();
 		createPresentationRenderPass();
@@ -585,21 +588,21 @@ private:
 		uMatrixLayoutBinding.descriptorCount = 1;
 		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
-		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding uGrassLayoutBinding{};
 		uGrassLayoutBinding.binding = 1;
 		uGrassLayoutBinding.descriptorCount = 1;
 		uGrassLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uGrassLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding uGrassPositionLayoutBinding{};
 		uGrassPositionLayoutBinding.binding = 2;
 		uGrassPositionLayoutBinding.descriptorCount = 1;
 		uGrassPositionLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		uGrassPositionLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
 		textureSamplerLayoutBinding.binding = 3;
@@ -1576,6 +1579,8 @@ private:
 
 		vkDeviceWaitIdle(device);
 
+		ImGui_ImplVulkan_RemoveTexture(renderTextureSet);
+
 		cleanupSwapChain();
 
 		createSwapChain();
@@ -1583,6 +1588,8 @@ private:
 		createColorResources();
 		createDepthResources();
 		createFrameBuffers();
+
+		renderTextureSet = ImGui_ImplVulkan_AddTexture(textureSampler, renderImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		//update the window size for imgui... does this do anything? visually seemingly no but lowkey i have no idea...
 		ImGuiIO& io = ImGui::GetIO();
@@ -2896,7 +2903,6 @@ private:
 
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
 
-
 		// drawing ground like an idiot rn but its working will fix later
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, groundGraphicsPipeline);
 
@@ -2918,6 +2924,10 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipelineLayout, 0, 1, &skyboxDescriptorSets[currentFrame], 0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(skyboxIndices.size()), 1, 0, 0, 0);
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
+		cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
 
 		vkCmdEndRenderPass(commandBuffer);
 	}
@@ -3030,6 +3040,14 @@ private:
 		vkGetDeviceQueue(device, indices.graphicsandComputeFamily.value(), 0, &graphicsQueue);
 		vkGetDeviceQueue(device, indices.graphicsandComputeFamily.value(), 0, &computeQueue);
 		vkGetDeviceQueue(device, indices.presentationFamily.value(), 0, &presentationQueue);
+	}
+
+	void loadRequiredFunctions() {
+		cmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)vkGetDeviceProcAddr(device, "vkCmdDrawMeshTasksEXT");
+
+		if (!cmdDrawMeshTasksEXT) {
+			throw std::runtime_error("Failed to load drawMeshTasks");
+		}
 	}
 
 	void pickPhysicalDevice() {
@@ -3363,7 +3381,7 @@ private:
 		ImGui::End();
 
 		ImGui::Begin("Render Window");
-		ImGui::Text("Render Window Size: %.3f by %.3f", ((uint32_t)ImGui::GetContentRegionAvail().x), ImGui::GetContentRegionAvail().y);
+		ImGui::Text("Render Window Size: %.3f by %.3f", ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
 		ImGui::Image((ImTextureID)renderTextureSet, renderImageWindowSize);
 		
 		//if (renderImageWindowSize.x != ImGui::GetContentRegionAvail().x && renderImageWindowSize.y != ImGui::GetContentRegionAvail().y) {
