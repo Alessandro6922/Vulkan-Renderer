@@ -159,6 +159,7 @@
     <None Include="shaders\grassPositionShader.comp" />
     <None Include="shaders\grassShader.frag" />
     <None Include="shaders\grassShader.vert" />
+    <None Include="shaders\grassTask.task" />
     <None Include="shaders\groundShader.frag" />
     <None Include="shaders\groundShader.vert" />
     <None Include="shaders\skyboxShader.frag" />

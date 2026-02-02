@@ -265,20 +265,20 @@ struct uGrassPositionBufferObject {
 
 struct uGrassBufferObject {
 	float elapsedTime;
-	float spacing;
+	float grassLean;
 	float grassHeight;
 	float bladeThickness;
-	glm::vec4 bezierCPoint1;
+	glm::vec4 controlPointPull;
 	glm::vec4 bezierCPoint2;
 	glm::vec4 bezierEndPoint;
 };
 
 struct GrassParameters {
 	float elapsedTime;
-	float spacing;
+	float grassLean;
 	float grassHeight;
 	float bladeThickness;
-	glm::vec4 bezierCPoint1;
+	glm::vec4 controlPointPull;
 	glm::vec4 bezierCPoint2;
 	glm::vec4 bezierEndPoint;
 };
@@ -542,9 +542,9 @@ private:
 	void initGrassBufferParams() {
 		grassParameters.grassHeight = 4.0f;
 		grassParameters.elapsedTime = 0.0f;
-		grassParameters.spacing = 0.05f;
-		grassParameters.bladeThickness = 0.8f;
-		grassParameters.bezierCPoint1 = glm::vec4(0.0f, 0.75f, 0.0f, 0.0f);
+		grassParameters.grassLean = 0.3f;
+		grassParameters.bladeThickness = 0.2f;
+		grassParameters.controlPointPull = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
 		grassParameters.bezierCPoint2 = glm::vec4(0.0f, 1.2f, 0.5f, 0.0f);
 		grassParameters.bezierEndPoint = glm::vec4(0.0f, 1.2f, 1.2f, 3.0f);
 	}
@@ -889,11 +889,19 @@ private:
 
 	void createGrassMeshGraphicsPipeline() {
 
+		auto taskShaderCode = readFile("shaders/grassTask.spv");
 		auto meshShaderCode = readFile("shaders/grassMesh.spv");
 		auto fragShaderCode = readFile("shaders/grassFrag.spv");
 
+		VkShaderModule taskShaderModule = createShaderModule(taskShaderCode);
 		VkShaderModule meshShaderModule = createShaderModule(meshShaderCode);
 		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		VkPipelineShaderStageCreateInfo taskShaderStageInfo{};
+		taskShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		taskShaderStageInfo.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+		taskShaderStageInfo.module = taskShaderModule;
+		taskShaderStageInfo.pName = "main";
 
 		VkPipelineShaderStageCreateInfo meshShaderStageInfo{};
 		meshShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -907,7 +915,7 @@ private:
 		fragShaderStageInfo.module = fragShaderModule;
 		fragShaderStageInfo.pName = "main";
 
-		VkPipelineShaderStageCreateInfo shaderStages[] = { meshShaderStageInfo, fragShaderStageInfo };
+		VkPipelineShaderStageCreateInfo shaderStages[] = { taskShaderStageInfo, meshShaderStageInfo, fragShaderStageInfo };
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -1002,7 +1010,7 @@ private:
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-		pipelineInfo.stageCount = 2;
+		pipelineInfo.stageCount = 3;
 		pipelineInfo.pStages = shaderStages;
 		pipelineInfo.pVertexInputState = nullptr;
 		pipelineInfo.pInputAssemblyState = nullptr;
@@ -1022,6 +1030,7 @@ private:
 			throw std::runtime_error("Failed to create grass mesh graphics pipeline!");
 		}
 
+		vkDestroyShaderModule(device, taskShaderModule, nullptr);
 		vkDestroyShaderModule(device, meshShaderModule, nullptr);
 		vkDestroyShaderModule(device, fragShaderModule, nullptr);
 	}
@@ -2559,10 +2568,10 @@ private:
 
 		uGrassBufferObject gbo{};
 		gbo.elapsedTime = elapsedTime;
-		gbo.spacing = grassParameters.spacing;
+		gbo.grassLean = grassParameters.grassLean;
 		gbo.grassHeight = grassParameters.grassHeight;
 		gbo.bladeThickness = grassParameters.bladeThickness;
-		gbo.bezierCPoint1 = grassParameters.bezierCPoint1;
+		gbo.controlPointPull = grassParameters.controlPointPull;
 		gbo.bezierCPoint2 = grassParameters.bezierCPoint2;
 		gbo.bezierEndPoint = grassParameters.bezierEndPoint;
 
@@ -2877,13 +2886,13 @@ private:
 		renderPassInfo.pClearValues = clearValues.data();
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
+		//vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
 
 		VkBuffer vertexBuffers[] = { grassVertexBuffer, groundVertexBuffer, skyboxVertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
+		//vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
 
-		vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		//vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -2899,9 +2908,9 @@ private:
 		scissor.extent = { (uint32_t)renderImageWindowSize.x, (uint32_t)renderImageWindowSize.y };
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
+		//vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
 
-		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
+		//vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
 
 		// drawing ground like an idiot rn but its working will fix later
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, groundGraphicsPipeline);
@@ -3372,12 +3381,10 @@ private:
 		ImGui::End();
 
 		ImGui::Begin("Grass Parameters");
-		ImGui::SliderFloat("Spacing", &grassParameters.spacing, 0.01f, 1.0f);
+		ImGui::SliderFloat("Grass Lean", &grassParameters.grassLean, 0.0f, 10.0f);
 		ImGui::SliderFloat("Grass height", &grassParameters.grassHeight, 0.1f, 10.0f);
-		ImGui::SliderFloat("Blade thickness", &grassParameters.bladeThickness, 0.1f, 5.0f);
-		ImGui::DragFloat4("Bezier Control Point 1", &grassParameters.bezierCPoint1.x);
-		ImGui::DragFloat4("Bezier Control Point 2", &grassParameters.bezierCPoint2.x);
-		ImGui::DragFloat4("Bezier End Point / Scaling factor", &grassParameters.bezierEndPoint.x);
+		ImGui::SliderFloat("Blade thickness", &grassParameters.bladeThickness, 0.1f, 10.0f);
+		ImGui::DragFloat3("Grass Control Point Pull", &grassParameters.controlPointPull.x, 0.1f, -10.0f, 10.0f);
 		ImGui::End();
 
 		ImGui::Begin("Render Window");

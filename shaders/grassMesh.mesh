@@ -7,19 +7,97 @@ layout(binding = 0) uniform UniformBufferObject {
 	mat4 proj;
 } ubo;
 
+layout(binding = 1) uniform GrassDataBufferObject{
+	float elapsedTime;
+	float grassLean;
+	float grassHeight;
+	float bladeThickness;
+	vec4 controlPointPull;
+	vec4 bezierCPoint2;
+	vec4 bezierEndPoint;
+} gdbo;
 
 layout(location = 0) out vec3 fragColour[];
 layout(location = 1) out vec2 fragTexCoord[];
 layout(location = 2) out vec3 normal[];
 
+vec3 bezier(vec3 A, vec3 B, vec3 C, float t) {
+  vec3 E = mix(A, B, t);
+  vec3 F = mix(B, C, t);
+  vec3 G = mix(E, F, t);
+
+  return G;
+}
+
+vec3 bezierDerivative(vec3 p0, vec3 p1, vec3 p2, float t)
+{
+    return 2.0 * (1.0 - t) * (p1 - p0) + 2.0 * t * (p2 - p1);
+}
+
+// https://github.com/klejah/ResponsiveGrassDemo/blob/6ce514717467acc80fd965a6f7695d5151ba8c03/ResponsiveGrassDemo/shader/Grass/GrassUpdateForcesShader.cs#L67
+void MakePersistentLength(in vec3 groundPos, inout vec3 v1, inout vec3 v2, in float height) {
+    //Persistent length
+    vec3 v01 = v1 - groundPos;
+    vec3 v12 = v2 - v1;
+    float lv01 = length(v01);
+    float lv12 = length(v12);
+
+
+    float L1 = lv01 + lv12;
+    float L0 = length(v2 - groundPos);
+    float L = (2.0 * L0 + L1) / 3.0; //http://steve.hollasch.net/cgindex/curves/cbezarclen.html
+
+    float ldiff = height / L;
+    v01 = v01 * ldiff;
+    v12 = v12 * ldiff;
+    v1 = groundPos + v01;
+    v2 = v1 + v12;
+}
+
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout(triangles) out;
 layout(max_vertices = 128, max_primitives = 16) out;
 void main(){
-	SetMeshOutputsEXT(3, 1);
+	SetMeshOutputsEXT(9, 7);
 
-	gl_MeshVerticesEXT[0].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(-25.0, -25.0, 0.0, 1.0);
-	gl_MeshVerticesEXT[1].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(0.0, 25.0, 0.0, 1.0);
-	gl_MeshVerticesEXT[2].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(25.0, -25.0, 0.0, 1.0);
+	vec3 bladeDirection = vec3(0.0, 0.0, 1.0);
+
+	vec3 basePosition = vec3(0.0, 5.0, 0.0);
+	vec3 controlPoint = basePosition + vec3(0.0, gdbo.grassHeight, 0.0) + gdbo.controlPointPull.xyz;
+	vec3 tipPoint = controlPoint + bladeDirection * gdbo.grassHeight * gdbo.grassLean;
+
+	MakePersistentLength(basePosition, controlPoint, tipPoint, gdbo.grassHeight);
+
+	vec3 basePointL = basePosition - vec3(gdbo.bladeThickness, 0.0, 0.0);
+	vec3 basePointR = basePosition + vec3(gdbo.bladeThickness, 0.0, 0.0);
+	vec3 controlPointL = controlPoint - vec3(gdbo.bladeThickness * 0.75, 0.0, 0.0);
+	vec3 controlPointR = controlPoint + vec3(gdbo.bladeThickness * 0.75, 0.0, 0.0);
+	vec3 tipPointL = bezier(basePosition, controlPoint, tipPoint, 0.9) - vec3(gdbo.bladeThickness * 0.5, 0.0, 0.0);
+	vec3 tipPointR = bezier(basePosition, controlPoint, tipPoint, 0.9) + vec3(gdbo.bladeThickness * 0.5, 0.0, 0.0);
+
+	gl_MeshVerticesEXT[0].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointL, controlPointL, tipPointL, 0.0), 1.0);
+	gl_MeshVerticesEXT[1].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointR, controlPointR, tipPointR, 0.0), 1.0);
+	gl_MeshVerticesEXT[2].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointL, controlPointL, tipPointL, 0.25), 1.0);
+	gl_MeshVerticesEXT[3].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointR, controlPointR, tipPointR, 0.25), 1.0);
+	gl_MeshVerticesEXT[4].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointL, controlPointL, tipPointL, 0.5), 1.0);
+	gl_MeshVerticesEXT[5].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointR, controlPointR, tipPointR, 0.5), 1.0);
+	gl_MeshVerticesEXT[6].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointL, controlPointL, tipPointL, 0.75), 1.0);
+	gl_MeshVerticesEXT[7].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(bezier(basePointR, controlPointR, tipPointR, 0.75), 1.0);
+	gl_MeshVerticesEXT[8].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(tipPoint, 1.0);
+
 	gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+	gl_PrimitiveTriangleIndicesEXT[1] = uvec3(3, 2, 1);
+	gl_PrimitiveTriangleIndicesEXT[2] = uvec3(2, 3, 4);
+	gl_PrimitiveTriangleIndicesEXT[3] = uvec3(5, 4, 3);
+	gl_PrimitiveTriangleIndicesEXT[4] = uvec3(4, 5, 6);
+	gl_PrimitiveTriangleIndicesEXT[5] = uvec3(7, 6, 5);
+	gl_PrimitiveTriangleIndicesEXT[6] = uvec3(8, 7, 6);
+//	uint offset = 4 * gl_LocalInvocationID.x;
+//
+//	gl_MeshVerticesEXT[0 + offset].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(-1.0 + (gl_LocalInvocationID.x * 2), 2.0, 0.0 + (gl_WorkGroupID.x * 2), 1.0);
+//	gl_MeshVerticesEXT[1 + offset].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(-1.0 + (gl_LocalInvocationID.x * 2), 4.0, 0.0 + (gl_WorkGroupID.x * 2), 1.0);
+//	gl_MeshVerticesEXT[2 + offset].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(1.0 + (gl_LocalInvocationID.x * 2), 4.0, 0.0 + (gl_WorkGroupID.x * 2), 1.0);
+//	gl_MeshVerticesEXT[3 + offset].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(1.0 + (gl_LocalInvocationID.x * 2), 2.0, 0.0 + (gl_WorkGroupID.x * 2), 1.0);
+//	gl_PrimitiveTriangleIndicesEXT[0 + (offset / 2)] = uvec3(0 + offset, 1 + offset, 2 + offset);
+//	gl_PrimitiveTriangleIndicesEXT[1 + (offset / 2)] = uvec3(0 + offset, 2 + offset, 3 + offset);
 }
