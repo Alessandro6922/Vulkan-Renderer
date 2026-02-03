@@ -4,17 +4,25 @@
 
 #version 460
 
-const uint grassCount = 1638400;
+const uint grassCount = 65536;
 const uint gridSize = uint(sqrt(grassCount)); // 128
 const uint planeSize = 500; // -25 to 25 in each direction
 const float scalingFactor = float(planeSize) / float(gridSize);
 const float randomOffsetScale = 4.0;
 
+layout(set = 0, binding = 0) uniform UniformBufferObject {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+} ubo;
+
 layout(std430, set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
-    vec4 positionsOut[];
+    vec4 positionsOut[grassCount];
+    vec4 groundNormalsOut[grassCount];
 }ssbo;
 
 layout(set = 1, binding = 1) uniform sampler2D displacementSampler;
+layout(set = 1, binding = 2) uniform sampler2D normalSampler;
 layout(set = 0, binding = 4) uniform sampler2D noiseSampler;
 
 float randomOffset(uint instanceIndex){
@@ -31,19 +39,23 @@ void main(){
 
     uint gridX = (threadID % gridSize);
     uint gridZ = (threadID / gridSize);
-
-    vec2 uv = vec2(float(gridX) / float(gridSize), float(gridZ) / float(gridSize));
     
-    int centredX = int(gridX) - 640;
-    int centredZ = int(gridZ) - 640;
+    float offsetX = float(gridX) + randomOffset(threadID) * float(1 / gridSize) * randomOffsetScale;
+    float offsetZ = float(gridZ) + randomOffset(threadID) * float(1 / gridSize) * randomOffsetScale;
+
+    vec2 uv = vec2(float(offsetX) / float(gridSize), float(offsetZ) / float(gridSize));
+
+    int centredX = int(offsetX) - int(gridSize / 2);// - 640;
+    int centredZ = int(offsetZ) - int(gridSize / 2);// - 640;
 
     float finalX = float(centredX) * scalingFactor;
-    finalX += randomOffset(threadID) * randomOffsetScale;
     float finalZ = float(centredZ) * scalingFactor;
-    finalZ += randomOffset(threadID) * randomOffsetScale;
 
     float height = 500 * texture(displacementSampler, uv).g;
 
+    // normals are just not right i so cannot be fucked fixing this right now i feel like im chasing a never ending thread i do not know what the root cause is
+    vec3 normal = texture(normalSampler, uv).rgb;
+    
     float randomRotation = randomAngle(threadID);
 
     float sampledRotation = texture(noiseSampler, uv).r * 360.0; // ill sort this later
@@ -53,4 +65,5 @@ void main(){
     float rotation = mix(mix(randomRotation, sampledRotation, 0.3), windDirectionAngle, 0.8);
 
     ssbo.positionsOut[threadID] = vec4(finalX, height, finalZ, rotation);
+    ssbo.groundNormalsOut[threadID] = vec4(0.0, 1.0, 0.0, 1.0);
 }

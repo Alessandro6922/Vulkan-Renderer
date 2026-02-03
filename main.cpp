@@ -59,6 +59,7 @@ const std::string BOX_MODEL_PATH = "Resources/Models/skybox.obj";
 const std::string GRASS_TEXTURE_PATH = "Resources/Textures/grass.png";
 const std::string GROUND_TEXTURE_PATH = "Resources/Textures/grassFlat.jpg";
 const std::string GROUND_DISPLACEMENT_TEXTURE_PATH = "Resources/Textures/groundDisplacement.png";
+const std::string GROUND_NORMAL_TEXTURE_PATH = "Resources/Textures/groundDisplacementNormal.png";
 const std::string GRASS_ROTATION_NOISE_TEXTURE_PATH = "Resources/Textures/grassRotationNoise.png";
 const std::string CUBEMAP_FRONT_TEXTURE_PATH = "Resources/Textures/cubeMapFront.png";
 const std::string CUBEMAP_BACK_TEXTURE_PATH = "Resources/Textures/cubeMapBack.png";
@@ -69,7 +70,7 @@ const std::string CUBEMAP_BOTTOM_TEXTURE_PATH = "Resources/Textures/cubeMapBotto
 
 const int MAX_FRAMES_IN_FLIGHT = 3;
 
-const int GRASS_BLADE_COUNT = 1638400;
+const int GRASS_BLADE_COUNT = 65536;
 
 Camera camera;
 
@@ -261,6 +262,7 @@ struct uMatrixBufferObject {
 
 struct uGrassPositionBufferObject {
 	glm::vec4 positionR; // XYZ positon, W holds rotation value
+	glm::vec4 groundNormal; // XYZ positon, W holds patch height
 };
 
 struct uGrassBufferObject {
@@ -415,6 +417,10 @@ private:
 	VkDeviceMemory groundDisplacementTextureImageMemory;
 	VkImageView groundDisplacementTextureImageView;
 
+	VkImage groundNormalTextureImage;
+	VkDeviceMemory groundNormalTextureImageMemory;
+	VkImageView groundNormalTextureImageView;
+
 	VkImage grassRotationNoiseTextureImage;
 	VkDeviceMemory grassRotationNoiseTextureImageMemory;
 	VkImageView grassRotationNoiseTextureImageView;
@@ -542,7 +548,7 @@ private:
 	void initGrassBufferParams() {
 		grassParameters.grassHeight = 4.0f;
 		grassParameters.elapsedTime = 0.0f;
-		grassParameters.grassLean = 0.3f;
+		grassParameters.grassLean = 0.01f;
 		grassParameters.bladeThickness = 0.2f;
 		grassParameters.controlPointPull = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
 		grassParameters.bezierCPoint2 = glm::vec4(0.0f, 1.2f, 0.5f, 0.0f);
@@ -588,7 +594,7 @@ private:
 		uMatrixLayoutBinding.descriptorCount = 1;
 		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
-		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
+		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_COMPUTE_BIT;
 
 		VkDescriptorSetLayoutBinding uGrassLayoutBinding{};
 		uGrassLayoutBinding.binding = 1;
@@ -645,14 +651,21 @@ private:
 		displacementSamplerLayoutBinding.pImmutableSamplers = nullptr;
 		displacementSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT;
 
+		VkDescriptorSetLayoutBinding normalSamplerLayoutBinding{};
+		normalSamplerLayoutBinding.binding = 2;
+		normalSamplerLayoutBinding.descriptorCount = 1;
+		normalSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		normalSamplerLayoutBinding.pImmutableSamplers = nullptr;
+		normalSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT;
+
 		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
-		textureSamplerLayoutBinding.binding = 2;
+		textureSamplerLayoutBinding.binding = 3;
 		textureSamplerLayoutBinding.descriptorCount = 1;
 		textureSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		textureSamplerLayoutBinding.pImmutableSamplers = nullptr;
 		textureSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-		std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uMatrixLayoutBinding, displacementSamplerLayoutBinding, textureSamplerLayoutBinding };
+		std::array<VkDescriptorSetLayoutBinding, 4> bindings = { uMatrixLayoutBinding, displacementSamplerLayoutBinding, normalSamplerLayoutBinding, textureSamplerLayoutBinding };
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -997,10 +1010,12 @@ private:
 		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 		dynamicState.pDynamicStates = dynamicStates.data();
 
+		std::array<VkDescriptorSetLayout, 2> layouts = { grassDescriptorSetLayout, groundDescriptorSetLayout };
+
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &grassDescriptorSetLayout;
+		pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+		pipelineLayoutInfo.pSetLayouts = layouts.data();
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -2002,6 +2017,9 @@ private:
 		createTextureImage(GROUND_TEXTURE_PATH, groundTextureImage, groundTextureImageMemory);
 		createTextureImageView(groundTextureImageView, groundTextureImage);
 
+		createTextureImage(GROUND_NORMAL_TEXTURE_PATH, groundNormalTextureImage, groundNormalTextureImageMemory);
+		createTextureImageView(groundNormalTextureImageView, groundNormalTextureImage);
+
 		createTextureImage(GROUND_DISPLACEMENT_TEXTURE_PATH, groundDisplacementTextureImage, groundDisplacementTextureImageMemory);
 		createTextureImageView(groundDisplacementTextureImageView, groundDisplacementTextureImage);
 
@@ -2609,13 +2627,15 @@ private:
 	}
 
 	void createGroundDescriptorPools() {
-		std::array<VkDescriptorPoolSize, 3> poolSizes{};
+		std::array<VkDescriptorPoolSize, 4> poolSizes{};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 		poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[3].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -2765,12 +2785,17 @@ private:
 			displacementImageInfo.imageView = groundDisplacementTextureImageView;
 			displacementImageInfo.sampler = textureSampler;
 
+			VkDescriptorImageInfo normalImageInfo{};
+			normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			normalImageInfo.imageView = groundNormalTextureImageView;
+			normalImageInfo.sampler = textureSampler;
+
 			VkDescriptorImageInfo textureImageInfo{};
 			textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			textureImageInfo.imageView = groundTextureImageView;
 			textureImageInfo.sampler = textureSampler;
 
-			std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+			std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[0].dstSet = groundDescriptorSets[i];
@@ -2794,7 +2819,15 @@ private:
 			descriptorWrites[2].dstArrayElement = 0;
 			descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrites[2].descriptorCount = 1;
-			descriptorWrites[2].pImageInfo = &textureImageInfo;
+			descriptorWrites[2].pImageInfo = &normalImageInfo;
+
+			descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[3].dstSet = groundDescriptorSets[i];
+			descriptorWrites[3].dstBinding = 3;
+			descriptorWrites[3].dstArrayElement = 0;
+			descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[3].descriptorCount = 1;
+			descriptorWrites[3].pImageInfo = &textureImageInfo;
 
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
@@ -3462,6 +3495,10 @@ private:
 		vkDestroyImageView(device, groundDisplacementTextureImageView, nullptr);
 		vkDestroyImage(device, groundDisplacementTextureImage, nullptr);
 		vkFreeMemory(device, groundDisplacementTextureImageMemory, nullptr);
+
+		vkDestroyImageView(device, groundNormalTextureImageView, nullptr);
+		vkDestroyImage(device, groundNormalTextureImage, nullptr);
+		vkFreeMemory(device, groundNormalTextureImageMemory, nullptr);
 
 		vkDestroyImageView(device, grassRotationNoiseTextureImageView, nullptr);
 		vkDestroyImage(device, grassRotationNoiseTextureImage, nullptr);

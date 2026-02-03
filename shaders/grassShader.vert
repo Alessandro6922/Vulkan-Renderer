@@ -1,5 +1,7 @@
 #version 460
 
+const uint grassCount = 16384;
+
 layout(binding = 0) uniform UniformBufferObject {
 	mat4 model;
 	mat4 view;
@@ -17,7 +19,8 @@ layout(binding = 1) uniform GrassDataBufferObject{
 } gdbo;
 
 layout(std430, binding = 2) readonly buffer GrassPositionsSSBOIn{
-	vec4 position[];
+	vec4 position[grassCount];
+	vec4 grassNormal[grassCount];
 } ssbo;
 
 layout(binding = 4) uniform sampler2D noiseSampler;
