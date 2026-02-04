@@ -13,6 +13,10 @@ layout(binding = 1) uniform GrassDataBufferObject{
 	float spacing;
 	float grassHeight;
 	float bladeThickness;
+	float curveStrength;
+	float unusedFloat1;
+	float unusedFloat2;
+	float unusedFloat3;
 	vec4 bezierCPoint1;
 	vec4 bezierCPoint2;
 	vec4 bezierEndPoint;

@@ -270,8 +270,11 @@ struct uGrassBufferObject {
 	float grassLean;
 	float grassHeight;
 	float bladeThickness;
-	glm::vec4 controlPointPull;
-	glm::vec4 bezierCPoint2;
+	float curveStrength;
+	float windStrength;
+	float windSpeed;
+	float minLODDistance;
+	glm::vec4 camPosition;
 	glm::vec4 bezierEndPoint;
 };
 
@@ -280,8 +283,11 @@ struct GrassParameters {
 	float grassLean;
 	float grassHeight;
 	float bladeThickness;
-	glm::vec4 controlPointPull;
-	glm::vec4 bezierCPoint2;
+	float curveStrength;
+	float windStrength;
+	float windSpeed;
+	float minLODDistance;
+	glm::vec4 camPosition;
 	glm::vec4 bezierEndPoint;
 };
 
@@ -431,6 +437,7 @@ private:
 
 	bool renderWindowResized = false;
 	ImVec2 renderImageWindowSize = ImVec2(1300, 900);
+
 	VkImage renderImage;
 	VkDeviceMemory renderImageMemory;
 	VkImageView renderImageView;
@@ -548,10 +555,13 @@ private:
 	void initGrassBufferParams() {
 		grassParameters.grassHeight = 4.0f;
 		grassParameters.elapsedTime = 0.0f;
-		grassParameters.grassLean = 0.01f;
+		grassParameters.grassLean = 0.1f;
 		grassParameters.bladeThickness = 0.2f;
-		grassParameters.controlPointPull = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
-		grassParameters.bezierCPoint2 = glm::vec4(0.0f, 1.2f, 0.5f, 0.0f);
+		grassParameters.curveStrength = 0.15f;
+		grassParameters.windStrength = 0.2f;
+		grassParameters.windSpeed = 0.7f;
+		grassParameters.minLODDistance = 100.0;
+		grassParameters.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0);
 		grassParameters.bezierEndPoint = glm::vec4(0.0f, 1.2f, 1.2f, 3.0f);
 	}
 
@@ -594,21 +604,21 @@ private:
 		uMatrixLayoutBinding.descriptorCount = 1;
 		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
-		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_COMPUTE_BIT;
+		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_TASK_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding uGrassLayoutBinding{};
 		uGrassLayoutBinding.binding = 1;
 		uGrassLayoutBinding.descriptorCount = 1;
 		uGrassLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uGrassLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
+		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding uGrassPositionLayoutBinding{};
 		uGrassPositionLayoutBinding.binding = 2;
 		uGrassPositionLayoutBinding.descriptorCount = 1;
 		uGrassPositionLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		uGrassPositionLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
+		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding textureSamplerLayoutBinding{};
 		textureSamplerLayoutBinding.binding = 3;
@@ -1619,6 +1629,8 @@ private:
 		ImGuiIO& io = ImGui::GetIO();
 		io.DisplaySize.x = (float)swapChainExtent.width;
 		io.DisplaySize.y = (float)swapChainExtent.height;
+
+		frameBufferResized = false;
 	}
 
 	void cleanupSwapChain() {
@@ -1727,8 +1739,8 @@ private:
 		frameBufferInfo.renderPass = renderTextureRenderPass;
 		frameBufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 		frameBufferInfo.pAttachments = attachments.data();
-		frameBufferInfo.width = renderImageWindowSize.x;
-		frameBufferInfo.height = renderImageWindowSize.y;
+		frameBufferInfo.width = static_cast<uint32_t>(renderImageWindowSize.x);
+		frameBufferInfo.height = static_cast<uint32_t>(renderImageWindowSize.y);
 		frameBufferInfo.layers = 1;
 
 		if (vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &renderTextureFrameBuffer) != VK_SUCCESS) {
@@ -1777,7 +1789,7 @@ private:
 
 	void createDepthResources() {
 		VkFormat depthFormat = findDepthFormat();
-		createImage(renderImageWindowSize.x, renderImageWindowSize.y, 1, msaaSamples, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+		createImage(static_cast<uint32_t>(renderImageWindowSize.x), static_cast<uint32_t>(renderImageWindowSize.y), 1, msaaSamples, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
 		depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}
 
@@ -2006,7 +2018,7 @@ private:
 	void createColorResources() {
 		VkFormat colorFormat = swapChainImageFormat;
 
-		createImage(renderImageWindowSize.x, renderImageWindowSize.y, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+		createImage(static_cast<uint32_t>(renderImageWindowSize.x), static_cast<uint32_t>(renderImageWindowSize.y), 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
 		colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 
@@ -2034,8 +2046,8 @@ private:
 		VkImageCreateInfo imageInfo{};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageInfo.extent.width = renderImageWindowSize.x;
-		imageInfo.extent.height = renderImageWindowSize.y;
+		imageInfo.extent.width = static_cast<uint32_t>(renderImageWindowSize.x);
+		imageInfo.extent.height = static_cast<uint32_t>(renderImageWindowSize.y);
 		imageInfo.extent.depth = 1;
 		imageInfo.mipLevels = 1;
 		imageInfo.arrayLayers = 1;
@@ -2578,7 +2590,7 @@ private:
 		uMatrixBufferObject ubo{};
 		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		//ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(70.0f), renderImageWindowSize.x / (float)renderImageWindowSize.y, 0.1f, 10000.0f);
+		ubo.proj = glm::perspective(glm::radians(70.0f), renderImageWindowSize.x / renderImageWindowSize.y, 0.1f, 10000.0f);
 		ubo.proj[1][1] *= -1; // flip render for vulkan
 		ubo.view = camera.getViewMatrix();
 
@@ -2589,8 +2601,11 @@ private:
 		gbo.grassLean = grassParameters.grassLean;
 		gbo.grassHeight = grassParameters.grassHeight;
 		gbo.bladeThickness = grassParameters.bladeThickness;
-		gbo.controlPointPull = grassParameters.controlPointPull;
-		gbo.bezierCPoint2 = grassParameters.bezierCPoint2;
+		gbo.curveStrength = grassParameters.curveStrength;
+		gbo.windStrength = grassParameters.windStrength;
+		gbo.windSpeed = grassParameters.windSpeed;
+		gbo.minLODDistance = grassParameters.minLODDistance;
+		gbo.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0);
 		gbo.bezierEndPoint = grassParameters.bezierEndPoint;
 
 		memcpy(uGrassDataBuffersMapped[currentImage], &gbo, sizeof(gbo));
@@ -2910,7 +2925,7 @@ private:
 		renderPassInfo.renderPass = renderTextureRenderPass;
 		renderPassInfo.framebuffer = renderTextureFrameBuffer;
 		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = { (uint32_t)renderImageWindowSize.x, (uint32_t)renderImageWindowSize.y };
+		renderPassInfo.renderArea.extent = { static_cast<uint32_t>(renderImageWindowSize.x), static_cast<uint32_t>(renderImageWindowSize.y) };
 
 		std::array<VkClearValue, 2> clearValues{};
 		clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
@@ -2930,15 +2945,15 @@ private:
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = static_cast<float>(renderImageWindowSize.x);
-		viewport.height = static_cast<float>(renderImageWindowSize.y);
+		viewport.width = renderImageWindowSize.x;
+		viewport.height = renderImageWindowSize.y;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
-		scissor.extent = { (uint32_t)renderImageWindowSize.x, (uint32_t)renderImageWindowSize.y };
+		scissor.extent = { static_cast<uint32_t>(renderImageWindowSize.x), static_cast<uint32_t>(renderImageWindowSize.y) };
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		//vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
@@ -3313,6 +3328,10 @@ private:
 			throw std::runtime_error("Failed to acquire swap chain image!");
 		}
 
+		if (renderWindowResized) {
+			recreateRenderWindow();
+		}
+
 		updateUniformBuffer(currentFrame);
 
 		// fence should only be reset if work is being submitted
@@ -3353,10 +3372,6 @@ private:
 		presentInfo.pResults = nullptr;
 
 		result = vkQueuePresentKHR(presentationQueue, &presentInfo);
-
-		if (renderWindowResized) {
-			recreateRenderWindow();
-		}
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || frameBufferResized) {
 			recreateSwapChain();
@@ -3408,27 +3423,31 @@ private:
 		createDockSpace();
 
 		ImGui::Begin("Application info");
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::Text("Average %.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
+		ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
 		ImGui::Text("Position: %.3f %.3f %.3f", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
 		ImGui::Text("Yaw: %.3f Pitch: %.3f", camera.getYaw(), camera.getPitch());
+		ImGui::Text("Render Size : %i by %i", static_cast<int>(renderImageWindowSize.x), static_cast<int>(renderImageWindowSize.y));
 		ImGui::End();
 
 		ImGui::Begin("Grass Parameters");
-		ImGui::SliderFloat("Grass Lean", &grassParameters.grassLean, 0.0f, 10.0f);
-		ImGui::SliderFloat("Grass height", &grassParameters.grassHeight, 0.1f, 10.0f);
-		ImGui::SliderFloat("Blade thickness", &grassParameters.bladeThickness, 0.1f, 10.0f);
-		ImGui::DragFloat3("Grass Control Point Pull", &grassParameters.controlPointPull.x, 0.1f, -10.0f, 10.0f);
+		ImGui::SliderFloat("Lean", &grassParameters.grassLean, 0.01f, 1.0f);
+		ImGui::SliderFloat("Height", &grassParameters.grassHeight, 0.1f, 10.0f);
+		ImGui::SliderFloat("Thickness", &grassParameters.bladeThickness, 0.1f, 10.0f);
+		ImGui::SliderFloat("Curve", &grassParameters.curveStrength, 0.0f, 1.0f);
+		ImGui::SliderFloat("Wind Strength", &grassParameters.windStrength, 0.2f, 10.0f);
+		ImGui::SliderFloat("Wind Speed", &grassParameters.windSpeed, 0.7f, 10.0f);
+		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
 		ImGui::End();
 
 		ImGui::Begin("Render Window");
-		ImGui::Text("Render Window Size: %.3f by %.3f", ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
-		ImGui::Image((ImTextureID)renderTextureSet, renderImageWindowSize);
-		
-		//if (renderImageWindowSize.x != ImGui::GetContentRegionAvail().x && renderImageWindowSize.y != ImGui::GetContentRegionAvail().y) {
-			//renderImageWindowSize = ImGui::GetContentRegionAvail();
-			//renderWindowResized = true;
-		//}
 
+		if (renderImageWindowSize.x != ImGui::GetContentRegionAvail().x || renderImageWindowSize.y != ImGui::GetContentRegionAvail().y) {
+			renderImageWindowSize = ImGui::GetContentRegionAvail();
+			renderWindowResized = true;
+		}
+
+		ImGui::Image((ImTextureID)renderTextureSet, renderImageWindowSize);
 		ImGui::End();
 
 		ImGui::Render();
@@ -3440,11 +3459,6 @@ private:
 			ImGui::UpdatePlatformWindows();
 			ImGui::RenderPlatformWindowsDefault();
 		}
-
-		//if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-		//	ImGui::UpdatePlatformWindows();
-		//	ImGui::RenderPlatformWindowsDefault();
-		//}
 	}
 
 	void generateGrassPositions() {
