@@ -60,7 +60,7 @@ const std::string GRASS_TEXTURE_PATH = "Resources/Textures/grass.png";
 const std::string GROUND_TEXTURE_PATH = "Resources/Textures/grassFlat.jpg";
 const std::string GROUND_DISPLACEMENT_TEXTURE_PATH = "Resources/Textures/groundDisplacement.png";
 const std::string GROUND_NORMAL_TEXTURE_PATH = "Resources/Textures/groundDisplacementNormal.png";
-const std::string GRASS_ROTATION_NOISE_TEXTURE_PATH = "Resources/Textures/grassRotationNoise.png";
+const std::string GRASS_ROTATION_NOISE_TEXTURE_PATH = "Resources/Textures/perlinNoise.png";
 const std::string CUBEMAP_FRONT_TEXTURE_PATH = "Resources/Textures/cubeMapFront.png";
 const std::string CUBEMAP_BACK_TEXTURE_PATH = "Resources/Textures/cubeMapBack.png";
 const std::string CUBEMAP_LEFT_TEXTURE_PATH = "Resources/Textures/cubeMapLeft.png";
@@ -3450,8 +3450,6 @@ private:
 		ImGui::SliderFloat("Height", &grassParameters.grassHeight, 0.1f, 10.0f);
 		ImGui::SliderFloat("Thickness", &grassParameters.bladeThickness, 0.01f, 3.0f);
 		ImGui::SliderFloat("Curve", &grassParameters.curveStrength, 0.0f, 1.0f);
-		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
-		ImGui::Combo("Grass col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
 		ImGui::End();
 
 		ImGui::Begin("Wind Parameters");
@@ -3459,6 +3457,11 @@ private:
 		ImGui::SliderFloat("Wind Speed", &grassParameters.windSpeed, 0.0f, 1.0f);
 		ImGui::SliderFloat("Wind Waviness", &grassParameters.windOffsetStrength, 0.0f, 1.0f);
 		ImGui::SliderFloat("Wind Direction", &grassParameters.windDirection, 0.0f, 6.28f);
+		ImGui::End();
+
+		ImGui::Begin("Render Options");
+		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
+		ImGui::Combo("Grass Col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
 		ImGui::End();
 
 		ImGui::Begin("Render Window");
