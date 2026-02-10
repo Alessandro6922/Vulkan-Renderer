@@ -70,7 +70,7 @@ const std::string CUBEMAP_BOTTOM_TEXTURE_PATH = "Resources/Textures/cubeMapBotto
 
 const int MAX_FRAMES_IN_FLIGHT = 3;
 
-const int GRASS_BLADE_COUNT = 65536;
+const int GRASS_BLADE_COUNT = 65536 * 4;
 
 Camera camera;
 
@@ -271,9 +271,13 @@ struct uGrassBufferObject {
 	float grassHeight;
 	float bladeThickness;
 	float curveStrength;
-	float windStrength;
+	float windLeanStrength;
 	float windSpeed;
+	float windOffsetStrength;
+	float windDirection;
 	float minLODDistance;
+	float padding1;
+	float padding2;
 	glm::vec4 camPosition;
 	glm::vec4 bezierEndPoint;
 };
@@ -284,12 +288,17 @@ struct GrassParameters {
 	float grassHeight;
 	float bladeThickness;
 	float curveStrength;
-	float windStrength;
+	float windLeanStrength;
 	float windSpeed;
+	float windOffsetStrength;
+	float windDirection;
 	float minLODDistance;
+	int grassColourOutput;
 	glm::vec4 camPosition;
 	glm::vec4 bezierEndPoint;
 };
+
+const char* grassColOptions[] = { "lit", "Lod", "Clump"};
 
 // The program gets wrapped into a class
 class VulkanApplication {
@@ -555,12 +564,15 @@ private:
 	void initGrassBufferParams() {
 		grassParameters.grassHeight = 4.0f;
 		grassParameters.elapsedTime = 0.0f;
-		grassParameters.grassLean = 0.1f;
-		grassParameters.bladeThickness = 0.2f;
+		grassParameters.grassLean = 0.4f;
+		grassParameters.bladeThickness = 0.12f;
 		grassParameters.curveStrength = 0.15f;
-		grassParameters.windStrength = 0.2f;
-		grassParameters.windSpeed = 0.7f;
+		grassParameters.windLeanStrength = 10.0f;
+		grassParameters.windSpeed = 0.07f;
+		grassParameters.windOffsetStrength = 0.1;
+		grassParameters.windDirection = 4.3;
 		grassParameters.minLODDistance = 100.0;
+		grassParameters.grassColourOutput = 0;
 		grassParameters.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0);
 		grassParameters.bezierEndPoint = glm::vec4(0.0f, 1.2f, 1.2f, 3.0f);
 	}
@@ -611,7 +623,7 @@ private:
 		uGrassLayoutBinding.descriptorCount = 1;
 		uGrassLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uGrassLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT;
+		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 		VkDescriptorSetLayoutBinding uGrassPositionLayoutBinding{};
 		uGrassPositionLayoutBinding.binding = 2;
@@ -632,7 +644,7 @@ private:
 		noiseSamplerLayoutBinding.descriptorCount = 1;
 		noiseSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		noiseSamplerLayoutBinding.pImmutableSamplers = nullptr;
-		noiseSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+		noiseSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
 		std::array<VkDescriptorSetLayoutBinding, 5> bindings = { uMatrixLayoutBinding, uGrassLayoutBinding, uGrassPositionLayoutBinding, textureSamplerLayoutBinding, noiseSamplerLayoutBinding };
 
@@ -1045,7 +1057,7 @@ private:
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = &dynamicState;
-		pipelineInfo.layout = grassPipelineLayout;
+		pipelineInfo.layout = grassMeshPipelineLayout;
 		pipelineInfo.renderPass = renderTextureRenderPass;
 		pipelineInfo.subpass = 0;
 		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -2590,7 +2602,7 @@ private:
 		uMatrixBufferObject ubo{};
 		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		//ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(70.0f), renderImageWindowSize.x / renderImageWindowSize.y, 0.1f, 10000.0f);
+		ubo.proj = glm::perspective(glm::radians(70.0f), renderImageWindowSize.x / renderImageWindowSize.y, 0.1f, 20000.0f);
 		ubo.proj[1][1] *= -1; // flip render for vulkan
 		ubo.view = camera.getViewMatrix();
 
@@ -2602,10 +2614,12 @@ private:
 		gbo.grassHeight = grassParameters.grassHeight;
 		gbo.bladeThickness = grassParameters.bladeThickness;
 		gbo.curveStrength = grassParameters.curveStrength;
-		gbo.windStrength = grassParameters.windStrength;
+		gbo.windLeanStrength = grassParameters.windLeanStrength;
 		gbo.windSpeed = grassParameters.windSpeed;
+		gbo.windOffsetStrength = grassParameters.windOffsetStrength;
+		gbo.windDirection = grassParameters.windDirection;
 		gbo.minLODDistance = grassParameters.minLODDistance;
-		gbo.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0);
+		gbo.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, static_cast<float>(grassParameters.grassColourOutput));
 		gbo.bezierEndPoint = grassParameters.bezierEndPoint;
 
 		memcpy(uGrassDataBuffersMapped[currentImage], &gbo, sizeof(gbo));
@@ -3427,17 +3441,24 @@ private:
 		ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
 		ImGui::Text("Position: %.3f %.3f %.3f", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
 		ImGui::Text("Yaw: %.3f Pitch: %.3f", camera.getYaw(), camera.getPitch());
+		ImGui::Text("Forward Vector: %.3f %.3f %.3f", camera.getForward().x, camera.getForward().y, camera.getForward().z);
 		ImGui::Text("Render Size : %i by %i", static_cast<int>(renderImageWindowSize.x), static_cast<int>(renderImageWindowSize.y));
 		ImGui::End();
 
 		ImGui::Begin("Grass Parameters");
 		ImGui::SliderFloat("Lean", &grassParameters.grassLean, 0.01f, 1.0f);
 		ImGui::SliderFloat("Height", &grassParameters.grassHeight, 0.1f, 10.0f);
-		ImGui::SliderFloat("Thickness", &grassParameters.bladeThickness, 0.1f, 10.0f);
+		ImGui::SliderFloat("Thickness", &grassParameters.bladeThickness, 0.01f, 3.0f);
 		ImGui::SliderFloat("Curve", &grassParameters.curveStrength, 0.0f, 1.0f);
-		ImGui::SliderFloat("Wind Strength", &grassParameters.windStrength, 0.2f, 10.0f);
-		ImGui::SliderFloat("Wind Speed", &grassParameters.windSpeed, 0.7f, 10.0f);
 		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
+		ImGui::Combo("Grass col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
+		ImGui::End();
+
+		ImGui::Begin("Wind Parameters");
+		ImGui::SliderFloat("Wind Strength", &grassParameters.windLeanStrength, 0.0f, 30.0f);
+		ImGui::SliderFloat("Wind Speed", &grassParameters.windSpeed, 0.0f, 1.0f);
+		ImGui::SliderFloat("Wind Waviness", &grassParameters.windOffsetStrength, 0.0f, 1.0f);
+		ImGui::SliderFloat("Wind Direction", &grassParameters.windDirection, 0.0f, 6.28f);
 		ImGui::End();
 
 		ImGui::Begin("Render Window");

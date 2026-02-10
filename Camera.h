@@ -21,6 +21,7 @@ public:
 	float getYaw();
 	float getPitch();
 	float getSensitivity();
+	glm::vec3 getForward();
 	glm::mat4 getViewMatrix();
 	glm::mat4 getProjectionMatrix();
 

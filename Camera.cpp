@@ -70,6 +70,12 @@ float Camera::getSensitivity()
 	return sensitivity;
 }
 
+glm::vec3 Camera::getForward()
+{
+	glm::mat4 camRot = getRotationMatrix();
+	return glm::normalize(glm::vec3(camRot * glm::vec4(0.0, 0.0, -1.0, 0.0f)));
+}
+
 glm::mat4 Camera::getViewMatrix()
 {
 	glm::mat4 camTranslation = glm::translate(glm::mat4(1.0f), position);

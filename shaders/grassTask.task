@@ -35,5 +35,5 @@
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main(){
 	//payload.col = vec3(Random(uint(gdbo.elapsedTime)), Random(uint(gdbo.elapsedTime)), Random(uint(gdbo.elapsedTime)));
-	EmitMeshTasksEXT(256, 256, 1);
+	EmitMeshTasksEXT(256, 256, 4);
 }

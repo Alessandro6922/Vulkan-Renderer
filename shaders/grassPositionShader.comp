@@ -4,9 +4,9 @@
 
 #version 460
 
-const uint grassCount = 65536;
-const uint gridSize = uint(sqrt(grassCount)); // 128
-const uint planeSize = 500; // -25 to 25 in each direction
+const uint grassCount = 65536 * 4;
+const uint gridSize = uint(sqrt(grassCount));
+const uint planeSize = 500;
 const float scalingFactor = float(planeSize) / float(gridSize);
 const float randomOffsetScale = 4.0;
 
@@ -16,9 +16,13 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 	mat4 proj;
 } ubo;
 
+struct blade{
+    vec4 position;
+    vec2 worldSpaceUV;
+};
+
 layout(std430, set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
-    vec4 positionsOut[grassCount];
-    vec4 groundNormalsOut[grassCount];
+    blade bladeInfo[grassCount];
 }ssbo;
 
 layout(set = 1, binding = 1) uniform sampler2D displacementSampler;
@@ -64,6 +68,6 @@ void main(){
 
     float rotation = mix(mix(randomRotation, sampledRotation, 0.3), windDirectionAngle, 0.8);
 
-    ssbo.positionsOut[threadID] = vec4(finalX, height, finalZ, rotation);
-    ssbo.groundNormalsOut[threadID] = vec4(0.0, 1.0, 0.0, 1.0);
+    ssbo.bladeInfo[threadID].position = vec4(finalX, height, finalZ, rotation);
+    ssbo.bladeInfo[threadID].worldSpaceUV = uv;
 }

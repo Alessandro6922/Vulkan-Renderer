@@ -17,7 +17,7 @@ layout(location = 2) out vec3 position;
 void main() {
 	vec4 vertexPos = vec4(inPosition, 1.0f);
 	position = vertexPos.xyz;
-	vertexPos.xyz *= 1000;
+	vertexPos.xyz *= 10000;
 	gl_Position = ubo.proj * ubo.view * ubo.model * vertexPos;
 	fragColour = inColour;
 	fragTexCoord = inTexCoord;
