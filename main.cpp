@@ -298,7 +298,7 @@ struct GrassParameters {
 	glm::vec4 bezierEndPoint;
 };
 
-const char* grassColOptions[] = { "lit", "Lod", "Clump"};
+const char* grassColOptions[] = { "lit", "Unlit", "Lod", "Clump"};
 
 // The program gets wrapped into a class
 class VulkanApplication {
