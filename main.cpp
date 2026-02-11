@@ -164,7 +164,8 @@ const std::vector<const char*> validationLayers = {
 const std::vector<const char*> deviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	VK_KHR_SPIRV_1_4_EXTENSION_NAME,
-	VK_EXT_MESH_SHADER_EXTENSION_NAME
+	VK_EXT_MESH_SHADER_EXTENSION_NAME,
+	VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
@@ -298,7 +299,7 @@ struct GrassParameters {
 	glm::vec4 bezierEndPoint;
 };
 
-const char* grassColOptions[] = { "lit", "Unlit", "Lod", "Clump"};
+const char* grassColOptions[] = { "lit", "Unlit", "Lod", "Clump", "Wireframe" };
 
 // The program gets wrapped into a class
 class VulkanApplication {
@@ -467,6 +468,7 @@ private:
 	GrassParameters grassParameters;
 
 	PFN_vkCmdDrawMeshTasksEXT cmdDrawMeshTasksEXT = NULL;
+	PFN_vkCmdSetPolygonModeEXT cmdSetPolygonModeEXT = NULL;
 
 	float currentFrameTime = 0;
 	float lastFrameTime = 0;
@@ -968,6 +970,13 @@ private:
 		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 		viewportState.viewportCount = 1;
 		viewportState.scissorCount = 1;
+
+		VkDynamicState renderDynamicStates[] = { VK_DYNAMIC_STATE_POLYGON_MODE_EXT };
+
+		VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+		dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamicStateInfo.dynamicStateCount = sizeof(renderDynamicStates) / sizeof(renderDynamicStates[0]);
+		dynamicStateInfo.pDynamicStates = renderDynamicStates;
 
 		VkPipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -2997,6 +3006,12 @@ private:
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(skyboxIndices.size()), 1, 0, 0, 0);
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
+		if (grassParameters.grassColourOutput == 4) {
+			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_LINE);
+		}
+		else {
+			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		}
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
 		cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
 
@@ -3083,6 +3098,11 @@ private:
 		deviceFeatures2.features = deviceFeatures;
 		deviceFeatures2.pNext = &meshFeatures;
 
+		VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3Features{};
+		dynamicState3Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
+		dynamicState3Features.extendedDynamicState3PolygonMode = VK_TRUE;
+		dynamicState3Features.pNext = &deviceFeatures2;
+
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
@@ -3094,7 +3114,7 @@ private:
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-		createInfo.pNext = &deviceFeatures2;
+		createInfo.pNext = &dynamicState3Features;
 
 		if (enableValidationLayers) {
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -3118,6 +3138,12 @@ private:
 
 		if (!cmdDrawMeshTasksEXT) {
 			throw std::runtime_error("Failed to load drawMeshTasks");
+		}
+
+		cmdSetPolygonModeEXT = (PFN_vkCmdSetPolygonModeEXT)vkGetDeviceProcAddr(device, "vkCmdSetPolygonModeEXT");
+
+		if (!cmdSetPolygonModeEXT) {
+			throw std::runtime_error("Failed to load setPolygonMode");
 		}
 	}
 

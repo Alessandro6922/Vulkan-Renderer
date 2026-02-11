@@ -275,6 +275,9 @@ void main(){
 		else if(colourOut == 3){
 			fragColour[vertID] = vec3(Random(overallWorkGroupID), Random(overallWorkGroupID + 1), Random(overallWorkGroupID + 2));
 		}
+		else if(colourOut == 4){
+			fragColour[vertID] = vec3(1, 1, 1);
+		}
 	}
 
 	for(uint i = 0; i < 2; ++i){
