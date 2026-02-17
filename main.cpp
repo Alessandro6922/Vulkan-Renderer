@@ -51,7 +51,7 @@ TODO:
 const uint32_t WIDTH = 1600;
 const uint32_t HEIGHT = 1200;
 
-const std::string HIGH_LOD_MODEL_PATH = "Resources/Models/grassBladeHigh.obj";
+const std::string HIGH_LOD_MODEL_PATH = "Resources/Models/grassBlade32v.obj";
 const std::string LOW_LOD_MODEL_PATH = "Resources/Models/grassBladeLow.obj";
 const std::string GROUND_MODEL_PATH = "Resources/Models/groundPlane.obj";
 const std::string BOX_MODEL_PATH = "Resources/Models/skybox.obj";
@@ -475,6 +475,7 @@ private:
 	float elapsedTime;
 	float dt;
 
+	bool renderWithMesh = false;
 
 	void initWindow() {
 		// initialise the GLFW library and tell it not to create an openGL context
@@ -2956,14 +2957,8 @@ private:
 		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		renderPassInfo.pClearValues = clearValues.data();
 
-		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		//vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
-
 		VkBuffer vertexBuffers[] = { grassVertexBuffer, groundVertexBuffer, skyboxVertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
-		//vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
-
-		//vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -2979,9 +2974,28 @@ private:
 		scissor.extent = { static_cast<uint32_t>(renderImageWindowSize.x), static_cast<uint32_t>(renderImageWindowSize.y) };
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		//vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
+		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
+		
+		if (grassParameters.grassColourOutput == 4) {
+			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_LINE);
+		}
+		else {
+			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		}
 
-		//vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
+		if (renderWithMesh) {
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
+			cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
+		}
+		else {
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
+			vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
+		}
+
 
 		// drawing ground like an idiot rn but its working will fix later
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, groundGraphicsPipeline);
@@ -3004,16 +3018,6 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipelineLayout, 0, 1, &skyboxDescriptorSets[currentFrame], 0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(skyboxIndices.size()), 1, 0, 0, 0);
-
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
-		if (grassParameters.grassColourOutput == 4) {
-			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_LINE);
-		}
-		else {
-			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
-		}
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
-		cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
 
 		vkCmdEndRenderPass(commandBuffer);
 	}
@@ -3486,6 +3490,7 @@ private:
 		ImGui::End();
 
 		ImGui::Begin("Render Options");
+		ImGui::Checkbox("Use Mesh Shaders? ", &renderWithMesh);
 		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
 		ImGui::Combo("Grass Col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
 		ImGui::End();

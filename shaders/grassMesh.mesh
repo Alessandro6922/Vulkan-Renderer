@@ -1,7 +1,7 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
 
-const uint grassCount = 65536 * 16;
+const uint grassCount = 65536 * 16 * 4;
 const float RANDOM_HEIGHT_SCALE = 0.7;
 const uint clumpRadius = 1;
 const float spacing = 1;
@@ -185,7 +185,7 @@ layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(triangles) out;
 layout(max_vertices = 256, max_primitives = 192) out;
 void main(){
-	uint overallWorkGroupID = gl_WorkGroupID.x + (gl_WorkGroupID.y * gl_NumWorkGroups.x) + (gl_WorkGroupID.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x);
+	uint overallWorkGroupID = (gl_WorkGroupID.x + (gl_WorkGroupID.y * gl_NumWorkGroups.x) + (gl_WorkGroupID.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x));
 
 	vec3 clumpCentre = ssbo.bladeInfo[overallWorkGroupID].position.xyz;
 	//const vec3 clumpNormal = texture(normalSampler, ssbo.bladeInfo[overallWorkGroupID].worldSpaceUV).rgb;

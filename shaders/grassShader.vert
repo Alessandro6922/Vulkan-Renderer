@@ -1,9 +1,10 @@
 #version 460
-#extension GL_KHR_vulkan_glsl : require
 
 const uint grassCount = 65536 * 16;
 const float RANDOM_HEIGHT_SCALE = 0.7;
 const float PI = 3.1415;
+const int highLODVerts = 16;
+
 
 layout(binding = 0) uniform UniformBufferObject {
 	mat4 model;
@@ -196,7 +197,7 @@ void main() {
 	vec3 biTangent = normalize(cross(bladeNormal, tangent));
 
 	vec3 sideVec = normalize(vec3(bladeDirection.y, 0.0, -bladeDirection.x));
-	vec3 offset = vertPos * gdbo.bladeThickness;
+	vec3 offset = tsign(gl_VertexIndex, 0) * gdbo.bladeThickness * sideVec;
 
 	vec3 p0 = bladePos.xyz;
 	vec3 p2 = p0 + vec3(0.0, gdbo.grassHeight, 0.0) + vec3(bladeDirection.x, 0.0, bladeDirection.y);
@@ -204,25 +205,37 @@ void main() {
 
 	MakePersistentLength(p0, p1, p2, gdbo.grassHeight);
 
+	vec3 basePoint = p0;
+	p0 += offset * 1.0;
+	p1 += offset * 0.9;
+	
+	int edgeID = gl_VertexIndex / 2;
+	float t = (edgeID == highLODVerts - 1) ? 1.0 : float(edgeID) / float(highLODVerts - 1);
+	vec3 vertexNormal = normalize(cross(sideVec, normalize(bezierDerivative(p0, p1, p2, t))));
+	//vec3 windOffset = vertexNormal * (sin(t + bladeID + gdbo.elapsedTime * gdbo.windSpeed) - 0.5) * texture(noiseSampler, (clumpUV * 3.0) + (gdbo.elapsedTime * gdbo.windSpeed)).r * (t * t) * gdbo.windOffsetStrength;
+	vec3 vertexPos = bezier(p0, p1, p2, t);
+	//vertexPos += windOffset;
+	
+
 	//vec3 secondPoint = instancePos;
 	//secondPoint.z = bezier(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, (instancePos.y / gdbo.bezierEndPoint.w) - 0.02).z;
 
-	vec3 derivative = bezierDerivative(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, instancePos.y / gdbo.bezierEndPoint.w);
-	vec3 normal = cross(normalize(derivative), vec3(1,0,0));
-	//vec3 directionTwo = vec3(1,0,0);
-	//vec3 normal = 
-	instancePos *= vec3(gdbo.bladeThickness, 1.0, 1.0);
-	instancePos += ((normalize(normal) * (sin((gdbo.elapsedTime + (instancePos.y / gdbo.bezierEndPoint.w) * 3.0 + gl_InstanceIndex) * 1.0)) - 0.5) * (instancePos.y / gdbo.bezierEndPoint.w) * 4 * texture(noiseSampler, vec2(ssbo.position[gl_InstanceIndex].x / 100.0 + gdbo.elapsedTime / 50.0, ssbo.position[gl_InstanceIndex].z / 100.0 + gdbo.elapsedTime / 50.0)).g);
+//	vec3 derivative = bezierDerivative(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, instancePos.y / gdbo.bezierEndPoint.w);
+//	vec3 normal = cross(normalize(derivative), vec3(1,0,0));
+//	//vec3 directionTwo = vec3(1,0,0);
+//	//vec3 normal = 
+//	instancePos *= vec3(gdbo.bladeThickness, 1.0, 1.0);
+//	instancePos += ((normalize(normal) * (sin((gdbo.elapsedTime + (instancePos.y / gdbo.bezierEndPoint.w) * 3.0 + gl_InstanceIndex) * 1.0)) - 0.5) * (instancePos.y / gdbo.bezierEndPoint.w) * 4 * texture(noiseSampler, vec2(ssbo.position[gl_InstanceIndex].x / 100.0 + gdbo.elapsedTime / 50.0, ssbo.position[gl_InstanceIndex].z / 100.0 + gdbo.elapsedTime / 50.0)).g);
+//
+//	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w)));
+//	normalOut = normalize(rotateAroundYAxis(vec4(normal, 0.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w))).xyz);
+//
+//	rotatedPos.x += ssbo.position[gl_InstanceIndex].x;
+//	rotatedPos.z += ssbo.position[gl_InstanceIndex].z;
+//	rotatedPos.y *= gdbo.grassHeight;
+//	rotatedPos.y += ssbo.position[gl_InstanceIndex].y;
 
-	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w)));
-	normalOut = normalize(rotateAroundYAxis(vec4(normal, 0.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w))).xyz);
-
-	rotatedPos.x += ssbo.position[gl_InstanceIndex].x;
-	rotatedPos.z += ssbo.position[gl_InstanceIndex].z;
-	rotatedPos.y *= gdbo.grassHeight;
-	rotatedPos.y += ssbo.position[gl_InstanceIndex].y;
-
-	gl_Position = ubo.proj * ubo.view * ubo.model * rotatedPos;
+	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(vertexPos, 1.0);
 	fragColour = inColour;
 	fragTexCoord = inTexCoord;
 }
