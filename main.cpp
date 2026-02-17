@@ -266,6 +266,11 @@ struct uGrassPositionBufferObject {
 	glm::vec4 groundNormal; // XYZ positon, W holds patch height
 };
 
+struct uGrassCulledPositionBufferObject {
+	glm::vec4 positionR; // XYZ positon, W holds rotation value
+	glm::vec4 groundNormal; // XYZ positon, W holds patch height
+};
+
 struct uGrassBufferObject {
 	float elapsedTime;
 	float grassLean;
@@ -353,6 +358,10 @@ private:
 	VkPipelineLayout grassPositionComputePipelineLayout;
 	VkPipeline grassPositionComputePipeline;
 
+	VkDescriptorSetLayout grassCullingDescriptorSetLayout;
+	VkPipelineLayout grassCullingComputePipelineLayout;
+	VkPipeline grassCullingComputePipeline;
+
 	VkDescriptorSetLayout groundDescriptorSetLayout;
 	VkPipelineLayout groundPipelineLayout;
 	VkPipeline groundGraphicsPipeline;
@@ -407,6 +416,10 @@ private:
 	std::vector<VkBuffer> uGrassPositionBuffers;
 	std::vector<VkDeviceMemory> uGrassPositionBuffersMemory;
 	std::vector<void*> uGrassPositionBuffersMapped;
+
+	std::vector<VkBuffer> uGrassCulledPositionBuffers;
+	std::vector<VkDeviceMemory> uGrassCulledPositionBuffersMemory;
+	std::vector<void*> uGrassCulledPositionBuffersMapped;
 
 	VkDescriptorPool grassDescriptorPool;
 	std::vector<VkDescriptorSet> grassDescriptorSets;
@@ -611,6 +624,34 @@ private:
 		createGrassDescriptorSetLayout();
 		createGroundDescriptorSetLayout();
 		createSkyboxDescriptorSetLayout();
+		createGrassCullingDescriptorSetLayout();
+	}
+
+	void createGrassCullingDescriptorSetLayout() {
+		VkDescriptorSetLayoutBinding uMatrixLayoutBinding{};
+		uMatrixLayoutBinding.binding = 0;
+		uMatrixLayoutBinding.descriptorCount = 1;
+		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
+		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		VkDescriptorSetLayoutBinding uGrassPositionLayoutBinding{};
+		uGrassPositionLayoutBinding.binding = 1;
+		uGrassPositionLayoutBinding.descriptorCount = 1;
+		uGrassPositionLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		uGrassPositionLayoutBinding.pImmutableSamplers = nullptr;
+		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uMatrixLayoutBinding, uGrassPositionLayoutBinding };
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &grassCullingDescriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create grass culling descriptor set layouts!");
+		}
 	}
 
 	void createGrassDescriptorSetLayout() {
@@ -735,6 +776,7 @@ private:
 		createGroundGraphicsPipeline();
 		createGrassPositionComputePipeline();
 		createSkyboxGraphicsPipeline();
+		createGrassCullingComputePipeline();
 	}
 
 	void createGrassPositionComputePipeline() {
@@ -766,6 +808,40 @@ private:
 
 		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &grassPositionComputePipeline) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create grass position compute pipeline!");
+		}
+
+		vkDestroyShaderModule(device, computeShaderModule, nullptr);
+	}
+
+	void createGrassCullingComputePipeline() {
+		auto computeShaderCode = readFile("shaders/grassCullCompute.spv");
+
+		VkShaderModule computeShaderModule = createShaderModule(computeShaderCode);
+
+		VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
+		computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+		computeShaderStageInfo.module = computeShaderModule;
+		computeShaderStageInfo.pName = "main";
+
+		std::array<VkDescriptorSetLayout, 1> layouts = { grassDescriptorSetLayout };
+
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+		pipelineLayoutInfo.pSetLayouts = layouts.data();
+
+		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &grassCullingComputePipelineLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create grass culling compute pipeline layout!");
+		}
+
+		VkComputePipelineCreateInfo pipelineInfo{};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipelineInfo.layout = grassCullingComputePipelineLayout;
+		pipelineInfo.stage = computeShaderStageInfo;
+
+		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &grassCullingComputePipeline) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create grass culling compute pipeline!");
 		}
 
 		vkDestroyShaderModule(device, computeShaderModule, nullptr);
@@ -825,6 +901,13 @@ private:
 		viewportState.viewportCount = 1;
 		viewportState.scissorCount = 1;
 
+	/*	VkDynamicState renderDynamicStates[] = { VK_DYNAMIC_STATE_POLYGON_MODE_EXT };
+
+		VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+		dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamicStateInfo.dynamicStateCount = sizeof(renderDynamicStates) / sizeof(renderDynamicStates[0]);
+		dynamicStateInfo.pDynamicStates = renderDynamicStates;*/
+
 		VkPipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		rasterizer.depthClampEnable = VK_FALSE;
@@ -880,7 +963,8 @@ private:
 
 		std::vector<VkDynamicState> dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
+			VK_DYNAMIC_STATE_SCISSOR,
+			VK_DYNAMIC_STATE_POLYGON_MODE_EXT
 		};
 
 		VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -972,12 +1056,12 @@ private:
 		viewportState.viewportCount = 1;
 		viewportState.scissorCount = 1;
 
-		VkDynamicState renderDynamicStates[] = { VK_DYNAMIC_STATE_POLYGON_MODE_EXT };
+		//VkDynamicState renderDynamicStates[] = { VK_DYNAMIC_STATE_POLYGON_MODE_EXT };
 
-		VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
-		dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		dynamicStateInfo.dynamicStateCount = sizeof(renderDynamicStates) / sizeof(renderDynamicStates[0]);
-		dynamicStateInfo.pDynamicStates = renderDynamicStates;
+		//VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+		//dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		//dynamicStateInfo.dynamicStateCount = sizeof(renderDynamicStates) / sizeof(renderDynamicStates[0]);
+		//dynamicStateInfo.pDynamicStates = renderDynamicStates;
 
 		VkPipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -1034,7 +1118,8 @@ private:
 
 		std::vector<VkDynamicState> dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
+			VK_DYNAMIC_STATE_SCISSOR,
+			VK_DYNAMIC_STATE_POLYGON_MODE_EXT
 		};
 
 		VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -2597,6 +2682,20 @@ private:
 		}
 	}
 
+	void createGrassCulledPositionBuffers() {
+		VkDeviceSize grassCulledPositionBufferSize = sizeof(uGrassCulledPositionBufferObject) * GRASS_BLADE_COUNT;
+
+		uGrassCulledPositionBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+		uGrassCulledPositionBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+		uGrassCulledPositionBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			createBuffer(grassCulledPositionBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uGrassPositionBuffers[i], uGrassPositionBuffersMemory[i]);
+			vkMapMemory(device, uGrassPositionBuffersMemory[i], 0, grassCulledPositionBufferSize, 0, &uGrassPositionBuffersMapped[i]);
+		}
+	}
+
+
 	void createUniformBuffers() {
 		createMatrixBuffers();
 		createGrassDataBuffers();
@@ -2976,21 +3075,30 @@ private:
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
-		
-		if (grassParameters.grassColourOutput == 4) {
-			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_LINE);
-		}
-		else {
-			cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
-		}
 
 		if (renderWithMesh) {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
+
+			if (grassParameters.grassColourOutput == 4) {
+				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_LINE);
+			}
+			else {
+				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+			}
+
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
 			cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
 		}
 		else {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
+
+			if (grassParameters.grassColourOutput == 4) {
+				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_LINE);
+			}
+			else {
+				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+			}
+
 			vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
 			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
@@ -3086,6 +3194,7 @@ private:
 
 		VkPhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		deviceFeatures.fillModeNonSolid = VK_TRUE;
 
 		VkPhysicalDeviceMaintenance4Features maintenance4Features{};
 		maintenance4Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES;

@@ -1,0 +1,16 @@
+#version 460
+
+const uint grassCount = 65536 * 4;
+
+struct blade{
+    vec4 position;
+    vec2 worldSpaceUV;
+};
+
+layout(std430, set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
+    blade bladeInfo[grassCount];
+}ssbo;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main(){
+}

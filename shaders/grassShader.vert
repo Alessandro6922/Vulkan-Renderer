@@ -46,7 +46,8 @@ layout(location = 2) in vec2 inTexCoord;
 
 layout(location = 0) out vec3 fragColour;
 layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) out vec3 normalOut;
+layout(location = 2) out vec3 normal;
+layout(location = 3) out vec3 viewDirection;
 
 vec3 bezier(vec3 A, vec3 B, vec3 C, float t) {
   vec3 E = mix(A, B, t);
@@ -199,7 +200,12 @@ void main() {
 	vec3 sideVec = normalize(vec3(bladeDirection.y, 0.0, -bladeDirection.x));
 	vec3 offset = tsign(gl_VertexIndex, 0) * gdbo.bladeThickness * sideVec;
 
-	vec3 p0 = bladePos.xyz;
+	float offsetAngle = 2.0 * PI * Random(seed, gl_InstanceIndex);
+	float offsetRadius = sqrt(Random(seed, 19, gl_InstanceIndex));
+	vec3 bladeOffset = offsetRadius * (cos(offsetAngle) * tangent + sin(offsetAngle) * vec3(0, 0, 1));
+	
+
+	vec3 p0 = bladePos.xyz + bladeOffset;
 	vec3 p2 = p0 + vec3(0.0, gdbo.grassHeight, 0.0) + vec3(bladeDirection.x, 0.0, bladeDirection.y);
 	vec3 p1 = p0 + ((p2 - p0) * 0.75) + cross(((p2 - p0) * 0.75), sideVec) * gdbo.curveStrength;
 
@@ -214,28 +220,22 @@ void main() {
 	vec3 vertexNormal = normalize(cross(sideVec, normalize(bezierDerivative(p0, p1, p2, t))));
 	//vec3 windOffset = vertexNormal * (sin(t + bladeID + gdbo.elapsedTime * gdbo.windSpeed) - 0.5) * texture(noiseSampler, (clumpUV * 3.0) + (gdbo.elapsedTime * gdbo.windSpeed)).r * (t * t) * gdbo.windOffsetStrength;
 	vec3 vertexPos = bezier(p0, p1, p2, t);
-	//vertexPos += windOffset;
-	
-
-	//vec3 secondPoint = instancePos;
-	//secondPoint.z = bezier(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, (instancePos.y / gdbo.bezierEndPoint.w) - 0.02).z;
-
-//	vec3 derivative = bezierDerivative(vec3(0,0,0), gdbo.bezierCPoint1.xyz, gdbo.bezierCPoint2.xyz, gdbo.bezierEndPoint.xyz, instancePos.y / gdbo.bezierEndPoint.w);
-//	vec3 normal = cross(normalize(derivative), vec3(1,0,0));
-//	//vec3 directionTwo = vec3(1,0,0);
-//	//vec3 normal = 
-//	instancePos *= vec3(gdbo.bladeThickness, 1.0, 1.0);
-//	instancePos += ((normalize(normal) * (sin((gdbo.elapsedTime + (instancePos.y / gdbo.bezierEndPoint.w) * 3.0 + gl_InstanceIndex) * 1.0)) - 0.5) * (instancePos.y / gdbo.bezierEndPoint.w) * 4 * texture(noiseSampler, vec2(ssbo.position[gl_InstanceIndex].x / 100.0 + gdbo.elapsedTime / 50.0, ssbo.position[gl_InstanceIndex].z / 100.0 + gdbo.elapsedTime / 50.0)).g);
-//
-//	vec4 rotatedPos = rotateAroundYAxis(vec4(instancePos, 1.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w)));
-//	normalOut = normalize(rotateAroundYAxis(vec4(normal, 0.0f), randomAngle(int(ssbo.position[gl_InstanceIndex].w))).xyz);
-//
-//	rotatedPos.x += ssbo.position[gl_InstanceIndex].x;
-//	rotatedPos.z += ssbo.position[gl_InstanceIndex].z;
-//	rotatedPos.y *= gdbo.grassHeight;
-//	rotatedPos.y += ssbo.position[gl_InstanceIndex].y;
-
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(vertexPos, 1.0);
-	fragColour = inColour;
+	normal = mix(vertexNormal, offset, 0.4);
 	fragTexCoord = inTexCoord;
+
+	int colourOut = int(gdbo.camPosition.w);
+
+	if(colourOut == 0){
+		fragColour = vec3(1, 1, 1);
+	}
+	else if(colourOut == 2){
+		fragColour = vec3(1);
+	}
+	else if(colourOut == 3){
+		fragColour = vec3(Random(gl_InstanceIndex), Random(gl_InstanceIndex + 1), Random(gl_InstanceIndex + 2));
+	}
+	else if(colourOut == 4){
+		fragColour = vec3(1, 1, 1);
+	}
 }

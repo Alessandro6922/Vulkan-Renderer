@@ -66,6 +66,7 @@
     <None Include="shaders\skyboxShader.frag" />
     <None Include="shaders\grassMesh.mesh" />
     <None Include="shaders\grassTask.task" />
+    <None Include="shaders\grassCull.comp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h">
