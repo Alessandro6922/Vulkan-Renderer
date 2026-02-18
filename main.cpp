@@ -1,12 +1,9 @@
 /*
 TODO:
-	MAKE THE MESH SHADER DO SHIT
-	Light everything according to the skybox to create a realistic environment
-	Sort the wind:
-		Tune parameters
-		Change bezier to be off a single control point so its hopefully less weird
-		fix the grass growing and shrinking hopefully by doing stuff with the previous 2 points
-	also look into draw indirect for lods again and other stuff idk
+	add lods for vertex pipeline
+	scan
+	compact
+	dynamically update bladecount where needed based off of blades that are visible
 */
 
 
@@ -61,12 +58,14 @@ const std::string GROUND_TEXTURE_PATH = "Resources/Textures/grassFlat.jpg";
 const std::string GROUND_DISPLACEMENT_TEXTURE_PATH = "Resources/Textures/groundDisplacement.png";
 const std::string GROUND_NORMAL_TEXTURE_PATH = "Resources/Textures/groundDisplacementNormal.png";
 const std::string GRASS_ROTATION_NOISE_TEXTURE_PATH = "Resources/Textures/perlinNoise.png";
-const std::string CUBEMAP_FRONT_TEXTURE_PATH = "Resources/Textures/cubeMapFront.png";
-const std::string CUBEMAP_BACK_TEXTURE_PATH = "Resources/Textures/cubeMapBack.png";
-const std::string CUBEMAP_LEFT_TEXTURE_PATH = "Resources/Textures/cubeMapLeft.png";
-const std::string CUBEMAP_RIGHT_TEXTURE_PATH = "Resources/Textures/cubeMapRight.png";
-const std::string CUBEMAP_TOP_TEXTURE_PATH = "Resources/Textures/cubeMapTop.png";
-const std::string CUBEMAP_BOTTOM_TEXTURE_PATH = "Resources/Textures/cubeMapBottom.png";
+
+// https://opengameart.org/content/cloudy-skyboxes-0
+const std::string CUBEMAP_FRONT_TEXTURE_PATH = "Resources/Textures/cubeMapSunnyFront.png";
+const std::string CUBEMAP_BACK_TEXTURE_PATH = "Resources/Textures/cubeMapSunnyBack.png";
+const std::string CUBEMAP_LEFT_TEXTURE_PATH = "Resources/Textures/cubeMapSunnyLeft.png";
+const std::string CUBEMAP_RIGHT_TEXTURE_PATH = "Resources/Textures/cubeMapSunnyRight.png";
+const std::string CUBEMAP_TOP_TEXTURE_PATH = "Resources/Textures/cubeMapSunnyTop.png";
+const std::string CUBEMAP_BOTTOM_TEXTURE_PATH = "Resources/Textures/cubeMapSunnyBottom.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 3;
 
@@ -3101,7 +3100,7 @@ private:
 
 			vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT, 0, 0, 0);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT * 4, 0, 0, 0);
 		}
 
 

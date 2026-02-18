@@ -26,11 +26,13 @@ layout(set = 0, binding = 1) uniform GrassDataBufferObject{
 	vec4 bezierEndPoint;
 } gdbo;
 
-const vec3 lightDirection = vec3(-0.1, -0.1, 1.0);
+const vec3 lightDirectionDark = vec3(-0.1, -0.1, 1.0);
+const vec3 lightDirection = vec3(0.0, -1.0, 0.0);
 const vec3 sunColour = vec3(1.0, 1.0, 1.0);
-const vec3 ambientColour = vec3(0.12, 0.11, 0.16);
-const float ambientLight = 0.3;
-const float specularStrength = 0.5;
+const vec3 ambientColourDark = vec3(0.12, 0.11, 0.16);
+const vec3 ambientColour = vec3(0.44, 0.64, 0.92);
+const float ambientLight = 0.9;
+const float specularStrength = 0.7;
 
 void main() {
 	vec3 finalColour = vec3(1.0);

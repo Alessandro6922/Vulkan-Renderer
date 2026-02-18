@@ -3,6 +3,7 @@
 const uint grassCount = 65536 * 16;
 const float RANDOM_HEIGHT_SCALE = 0.7;
 const float PI = 3.1415;
+const float spacing = 1;
 const int highLODVerts = 16;
 
 
@@ -182,8 +183,9 @@ float randomAngle(int instanceIndex){
 
 void main() {
 	vec3 vertPos = inPosition;
-	const vec4 bladePos = ssbo.bladeInfo[gl_InstanceIndex].position;
-	const vec2 bladeUV = ssbo.bladeInfo[gl_InstanceIndex].worldSpaceUV;
+	const int bufferIndex = gl_InstanceIndex / 4;
+	const vec4 bladePos = ssbo.bladeInfo[bufferIndex].position;
+	const vec2 bladeUV = ssbo.bladeInfo[bufferIndex].worldSpaceUV;
 	const vec3 bladeNormal = vec3(0, 1, 0);
 
 	const uint seed = CombineSeed(uint(bladePos.x), uint(bladePos.z));
@@ -201,7 +203,7 @@ void main() {
 	vec3 offset = tsign(gl_VertexIndex, 0) * gdbo.bladeThickness * sideVec;
 
 	float offsetAngle = 2.0 * PI * Random(seed, gl_InstanceIndex);
-	float offsetRadius = sqrt(Random(seed, 19, gl_InstanceIndex));
+	float offsetRadius = spacing * sqrt(Random(seed, 19, gl_InstanceIndex));
 	vec3 bladeOffset = offsetRadius * (cos(offsetAngle) * tangent + sin(offsetAngle) * vec3(0, 0, 1));
 	
 
