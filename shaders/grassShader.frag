@@ -27,12 +27,12 @@ layout(set = 0, binding = 1) uniform GrassDataBufferObject{
 } gdbo;
 
 const vec3 lightDirectionDark = vec3(-0.1, -0.1, 1.0);
-const vec3 lightDirection = vec3(0.0, -1.0, 0.0);
+const vec3 lightDirection = vec3(0.0, -0.88, 0.9);
 const vec3 sunColour = vec3(1.0, 1.0, 1.0);
 const vec3 ambientColourDark = vec3(0.12, 0.11, 0.16);
 const vec3 ambientColour = vec3(0.44, 0.64, 0.92);
-const float ambientLight = 0.9;
-const float specularStrength = 0.7;
+const float ambientLight = 0.4;
+const float specularStrength = 0.1;
 
 void main() {
 	vec3 finalColour = vec3(1.0);
@@ -42,7 +42,7 @@ void main() {
 	//	if(surfaceNormal.z < 0){
 	//		surfaceNormal = -surfaceNormal;
 	//	}
-		vec3 lightDir = -lightDirection;
+		vec3 lightDir = lightDirection;
 
 		vec4 texColour = texture(texSampler, fragTexCoord);
 		texColour.rgb *= ambientColour;

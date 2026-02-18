@@ -235,7 +235,7 @@ void main() {
 		fragColour = vec3(1);
 	}
 	else if(colourOut == 3){
-		fragColour = vec3(Random(gl_InstanceIndex), Random(gl_InstanceIndex + 1), Random(gl_InstanceIndex + 2));
+		fragColour = vec3(Random(bufferIndex), Random(bufferIndex + 1), Random(bufferIndex + 2));
 	}
 	else if(colourOut == 4){
 		fragColour = vec3(1, 1, 1);
