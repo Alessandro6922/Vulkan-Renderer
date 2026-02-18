@@ -113,6 +113,9 @@ namespace {
 			case GLFW_KEY_Q:
 				camera.setVelocity(glm::vec3(camera.getVelocity().x, -1.0f, camera.getVelocity().z));
 				break;
+			case GLFW_KEY_LEFT_SHIFT:
+				camera.setSprint(true);
+				break;
 			case GLFW_KEY_ESCAPE:
 				if (lockMouse) {
 					glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -147,6 +150,9 @@ namespace {
 				break;
 			case GLFW_KEY_Q:
 				camera.setVelocity(glm::vec3(camera.getVelocity().x, 0.0f, camera.getVelocity().z));
+				break;
+			case GLFW_KEY_LEFT_SHIFT:
+				camera.setSprint(false);
 				break;
 			default:
 				break;

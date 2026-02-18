@@ -15,6 +15,8 @@ public:
 	void updateRotation(float changeX, float changeY);
 
 	void setVelocity(glm::vec3 newVelocity);
+	void setSprint(bool sprint);
+	void move(glm::vec3 translation);
 
 	glm::vec3 getVelocity();
 	glm::vec3 getPosition();
@@ -36,5 +38,8 @@ private:
 
 	glm::mat4 viewMatrix;
 	glm::mat4 projectionMatrix;
+
+	bool isSprinting;
+	float speedMult;
 };
 

@@ -6,6 +6,7 @@ Camera::Camera()
 	velocity = glm::vec3(0.0f);
 	yaw = 0.0f;
 	pitch = 0.0f;
+	speedMult = 15.f;
 
 	sensitivity = 0.0005f;
 
@@ -26,7 +27,7 @@ void Camera::update(float dt)
 	//glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f)) * rotation;
 
 	glm::mat4 camRot = getRotationMatrix();
-	position += glm::vec3(camRot * glm::vec4(velocity * 25.f, 0.0f) * dt);
+	position += glm::vec3(camRot * glm::vec4(velocity * speedMult, 0.0f) * dt);
 
 	//viewMatrix = glm::inverse(transform);
 }
@@ -43,6 +44,23 @@ void Camera::updateRotation(float changeX, float changeY)
 void Camera::setVelocity(glm::vec3 newVelocity)
 {
 	velocity = newVelocity;
+}
+
+void Camera::setSprint(bool sprint)
+{
+	isSprinting = sprint;
+
+	if (isSprinting) {
+		speedMult = 60.f;
+	}
+	else {
+		speedMult = 20.f;
+	}
+}
+
+void Camera::move(glm::vec3 translation)
+{
+	position += translation;
 }
 
 glm::vec3 Camera::getVelocity()
