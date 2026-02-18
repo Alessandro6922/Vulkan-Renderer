@@ -45,11 +45,11 @@ void main() {
 		vec3 lightDir = -lightDirection;
 
 		vec4 texColour = texture(texSampler, fragTexCoord);
-		texColour.rgb *= vec3(0.12, 0.11, 0.16);
-		float intesity = normalize(dot(normal, lightDirection));
-		float backsideIntensity = normalize(dot(-normal, lightDirection));
+		texColour.rgb *= ambientColour;
+		float intesity = normalize(dot(normal, lightDir));
+		float backsideIntensity = normalize(dot(-normal, lightDir));
 		//vec3 finalColour = normalize(sunColour * max(intesity, backsideIntensity));
-		vec3 reflectDir = reflect(lightDirection, surfaceNormal);
+		vec3 reflectDir = reflect(lightDir, surfaceNormal);
 		float spec = pow(max(dot(viewDirection, reflectDir), 0.0), 128);
 		vec3 specular = specularStrength * spec * sunColour;
 		vec3 ambient = ambientLight * ambientColour;
