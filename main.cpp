@@ -1,9 +1,7 @@
 /*
 TODO:
-	add lods for vertex pipeline
-	scan
-	compact
-	dynamically update bladecount where needed based off of blades that are visible
+	increase blade count for vertex pipeline
+	fix mesh pipeline
 */
 
 
@@ -49,7 +47,7 @@ const uint32_t WIDTH = 1600;
 const uint32_t HEIGHT = 1200;
 
 const std::string HIGH_LOD_MODEL_PATH = "Resources/Models/grassBlade32v.obj";
-const std::string LOW_LOD_MODEL_PATH = "Resources/Models/grassBladeLow.obj";
+const std::string LOW_LOD_MODEL_PATH = "Resources/Models/grassBlade6v.obj";
 const std::string GROUND_MODEL_PATH = "Resources/Models/groundPlane.obj";
 const std::string BOX_MODEL_PATH = "Resources/Models/skybox.obj";
 
@@ -272,8 +270,10 @@ struct uGrassPositionBufferObject {
 };
 
 struct uGrassCulledPositionBufferObject {
-	glm::vec4 positionR; // XYZ positon, W holds rotation value
-	glm::vec4 groundNormal; // XYZ positon, W holds patch height
+	glm::vec4 positionRHighLod; // XYZ positon, W holds rotation value
+	glm::vec4 groundNormalHighLod; // XYZ positon, W holds patch height
+	glm::vec4 positionRLowLod; // XYZ positon, W holds rotation value
+	glm::vec4 groundNormalLowLod; // XYZ positon, W holds patch height
 };
 
 struct uGrassBufferObject {
@@ -310,6 +310,12 @@ struct GrassParameters {
 };
 
 const char* grassColOptions[] = { "lit", "Unlit", "Lod", "Clump", "Wireframe" };
+
+struct drawIndirectBufferObject {
+	VkDrawIndexedIndirectCommand highLodDraw;
+	VkDrawIndexedIndirectCommand lowLodDraw;
+	VkDrawMeshTasksIndirectCommandEXT meshDrawCall;
+};
 
 // The program gets wrapped into a class
 class VulkanApplication {
@@ -396,6 +402,18 @@ private:
 	VkBuffer grassIndexBuffer;
 	VkDeviceMemory grassIndexBufferMemory;
 
+	std::vector<Vertex> grassVerticesLow;
+	VkBuffer grassVertexLowBuffer;
+	VkDeviceMemory grassVertexLowBufferMemory;
+	std::vector<uint32_t> grassIndicesLow;
+	VkBuffer grassIndexLowBuffer;
+	VkDeviceMemory grassIndexLowBufferMemory;
+
+	// TODO
+	std::vector<VkBuffer> grassIndirectDrawBuffers;
+	std::vector<VkDeviceMemory> grassIndirectDrawBufferMemory;
+	std::vector<void*> grassIndirectDrawBufferMapped;
+
 	std::vector<Vertex> groundVertices;
 	VkBuffer groundVertexBuffer;
 	VkDeviceMemory groundVertexBufferMemory;
@@ -422,6 +440,7 @@ private:
 	std::vector<VkDeviceMemory> uGrassPositionBuffersMemory;
 	std::vector<void*> uGrassPositionBuffersMapped;
 
+	// TODO
 	std::vector<VkBuffer> uGrassCulledPositionBuffers;
 	std::vector<VkDeviceMemory> uGrassCulledPositionBuffersMemory;
 	std::vector<void*> uGrassCulledPositionBuffersMapped;
@@ -434,6 +453,9 @@ private:
 
 	VkDescriptorPool skyboxDescriptorPool;
 	std::vector<VkDescriptorSet> skyboxDescriptorSets;
+
+	VkDescriptorPool grassCullDescriptorPool;
+	std::vector<VkDescriptorSet> grassCullDescriptorSets;
 
 	VkDescriptorPool imGUIDescriptorPool;
 
@@ -487,6 +509,7 @@ private:
 
 	PFN_vkCmdDrawMeshTasksEXT cmdDrawMeshTasksEXT = NULL;
 	PFN_vkCmdSetPolygonModeEXT cmdSetPolygonModeEXT = NULL;
+	PFN_vkCmdDrawMeshTasksIndirectEXT cmdDrawMeshTasksIndirectEXT = NULL;
 
 	float currentFrameTime = 0;
 	float lastFrameTime = 0;
@@ -633,21 +656,21 @@ private:
 	}
 
 	void createGrassCullingDescriptorSetLayout() {
-		VkDescriptorSetLayoutBinding uMatrixLayoutBinding{};
-		uMatrixLayoutBinding.binding = 0;
-		uMatrixLayoutBinding.descriptorCount = 1;
-		uMatrixLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		uMatrixLayoutBinding.pImmutableSamplers = nullptr;
-		uMatrixLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		VkDescriptorSetLayoutBinding uGrassIndirectDrawBinding{};
+		uGrassIndirectDrawBinding.binding = 0;
+		uGrassIndirectDrawBinding.descriptorCount = 1;
+		uGrassIndirectDrawBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		uGrassIndirectDrawBinding.pImmutableSamplers = nullptr;
+		uGrassIndirectDrawBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-		VkDescriptorSetLayoutBinding uGrassPositionLayoutBinding{};
-		uGrassPositionLayoutBinding.binding = 1;
-		uGrassPositionLayoutBinding.descriptorCount = 1;
-		uGrassPositionLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		uGrassPositionLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassPositionLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		VkDescriptorSetLayoutBinding uGrassPositionBinding{};
+		uGrassPositionBinding.binding = 1;
+		uGrassPositionBinding.descriptorCount = 1;
+		uGrassPositionBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		uGrassPositionBinding.pImmutableSamplers = nullptr;
+		uGrassPositionBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uMatrixLayoutBinding, uGrassPositionLayoutBinding };
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uGrassIndirectDrawBinding, uGrassPositionBinding };
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -672,7 +695,7 @@ private:
 		uGrassLayoutBinding.descriptorCount = 1;
 		uGrassLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uGrassLayoutBinding.pImmutableSamplers = nullptr;
-		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		uGrassLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
 
 		VkDescriptorSetLayoutBinding uGrassPositionLayoutBinding{};
 		uGrassPositionLayoutBinding.binding = 2;
@@ -795,7 +818,7 @@ private:
 		computeShaderStageInfo.module = computeShaderModule;
 		computeShaderStageInfo.pName = "main";
 
-		std::array<VkDescriptorSetLayout, 2> layouts = { grassDescriptorSetLayout, groundDescriptorSetLayout };
+		std::array<VkDescriptorSetLayout, 3> layouts = { grassDescriptorSetLayout, groundDescriptorSetLayout, grassCullingDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -829,7 +852,7 @@ private:
 		computeShaderStageInfo.module = computeShaderModule;
 		computeShaderStageInfo.pName = "main";
 
-		std::array<VkDescriptorSetLayout, 1> layouts = { grassDescriptorSetLayout };
+		std::array<VkDescriptorSetLayout, 2> layouts = { grassDescriptorSetLayout, grassCullingDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1934,6 +1957,10 @@ private:
 		createVertexBuffer(grassVertices, grassVertexBuffer, grassVertexBufferMemory);
 		createIndexBuffer(grassIndices, grassIndexBuffer, grassIndexBufferMemory);
 
+		loadModel(LOW_LOD_MODEL_PATH, grassVerticesLow, grassIndicesLow);
+		createVertexBuffer(grassVerticesLow, grassVertexLowBuffer, grassVertexLowBufferMemory);
+		createIndexBuffer(grassIndicesLow, grassIndexLowBuffer, grassIndexLowBufferMemory);
+
 		loadModel(GROUND_MODEL_PATH, groundVertices, groundIndices);
 		createVertexBuffer(groundVertices, groundVertexBuffer, groundVertexBufferMemory);
 		createIndexBuffer(groundIndices, groundIndexBuffer, groundIndexBufferMemory);
@@ -2242,7 +2269,6 @@ private:
 				throw std::runtime_error("Failed to load cubemap image : " + std::to_string(i));
 			}
 		}
-
 
 		mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
@@ -2674,6 +2700,46 @@ private:
 		}
 	}
 
+	void createIndirectDrawBuffer() {
+		VkDeviceSize indirectDrawBufferSize = sizeof(drawIndirectBufferObject);
+
+		grassIndirectDrawBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+		grassIndirectDrawBufferMemory.resize(MAX_FRAMES_IN_FLIGHT);
+		grassIndirectDrawBufferMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+		VkDrawMeshTasksIndirectCommandEXT drawIndirectMeshCmd{};
+		drawIndirectMeshCmd.groupCountX = 1;
+		drawIndirectMeshCmd.groupCountY = 1;
+		drawIndirectMeshCmd.groupCountZ = 1;
+
+		VkDrawIndexedIndirectCommand drawIndirectCmd{};
+		drawIndirectCmd.indexCount = static_cast<uint32_t>(grassIndices.size());
+		drawIndirectCmd.instanceCount = GRASS_BLADE_COUNT * 2;
+		drawIndirectCmd.firstIndex = 0;
+		drawIndirectCmd.firstInstance = 0;
+		drawIndirectCmd.vertexOffset = 0;
+
+		VkDrawIndexedIndirectCommand drawIndirectLODCmd{};
+		drawIndirectLODCmd.indexCount = static_cast<uint32_t>(grassIndices.size());
+		drawIndirectLODCmd.instanceCount = GRASS_BLADE_COUNT * 2;
+		drawIndirectLODCmd.firstIndex = 0;
+		drawIndirectLODCmd.firstInstance = GRASS_BLADE_COUNT * 2;
+		drawIndirectLODCmd.vertexOffset = 0;
+
+		drawIndirectBufferObject ibo{};
+		ibo.highLodDraw = drawIndirectCmd;
+		ibo.lowLodDraw = drawIndirectLODCmd;
+		ibo.meshDrawCall = drawIndirectMeshCmd;
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			createBuffer(indirectDrawBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, grassIndirectDrawBuffers[i], grassIndirectDrawBufferMemory[i]);
+			vkMapMemory(device, grassIndirectDrawBufferMemory[i], 0, indirectDrawBufferSize, 0, &grassIndirectDrawBufferMapped[i]);
+			
+			memcpy(grassIndirectDrawBufferMapped[i], &ibo, sizeof(ibo));
+
+		}
+	}
+
 	void createGrassPositionBuffers() {
 		VkDeviceSize grassPositionBufferSize = sizeof(uGrassPositionBufferObject) * GRASS_BLADE_COUNT;
 
@@ -2695,8 +2761,8 @@ private:
 		uGrassCulledPositionBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			createBuffer(grassCulledPositionBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uGrassPositionBuffers[i], uGrassPositionBuffersMemory[i]);
-			vkMapMemory(device, uGrassPositionBuffersMemory[i], 0, grassCulledPositionBufferSize, 0, &uGrassPositionBuffersMapped[i]);
+			createBuffer(grassCulledPositionBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uGrassCulledPositionBuffers[i], uGrassCulledPositionBuffersMemory[i]);
+			vkMapMemory(device, uGrassCulledPositionBuffersMemory[i], 0, grassCulledPositionBufferSize, 0, &uGrassCulledPositionBuffersMapped[i]);
 		}
 	}
 
@@ -2705,6 +2771,8 @@ private:
 		createMatrixBuffers();
 		createGrassDataBuffers();
 		createGrassPositionBuffers();
+		createGrassCulledPositionBuffers();
+		createIndirectDrawBuffer();
 	}
 
 	void updateUniformBuffer(uint32_t currentImage) {
@@ -2743,6 +2811,7 @@ private:
 		createGrassDescriptorPools();
 		createGroundDescriptorPools();
 		createSkyboxDescriptorPools();
+		createGrassCullingDescriptorPools();
 	}
 
 	void createGrassDescriptorPools() {
@@ -2809,10 +2878,29 @@ private:
 		}
 	}
 
+	void createGrassCullingDescriptorPools() {
+		std::array<VkDescriptorPoolSize, 2> poolSizes{};
+		poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &grassCullDescriptorPool) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create grass culling descriptor pool!");
+		}
+	}
+
 	void createDescriptorSets() {
 		createGroundDescriptorSets();
 		createGrassDescriptorSets();
 		createSkyboxDescriptorSets();
+		createGrassCullingDescriptorSets();
 	}
 
 	void createGrassDescriptorSets() {
@@ -2842,7 +2930,7 @@ private:
 			grassBufferInfo.range = sizeof(uGrassBufferObject);
 
 			VkDescriptorBufferInfo grassPositionBufferInfo{};
-			grassPositionBufferInfo.buffer = uGrassPositionBuffers[i];
+			grassPositionBufferInfo.buffer = uGrassCulledPositionBuffers[i];
 			grassPositionBufferInfo.offset = 0;
 			grassPositionBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -3024,6 +3112,54 @@ private:
 		}
 	}
 
+	void createGrassCullingDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, grassCullingDescriptorSetLayout);
+
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = grassCullDescriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
+
+		grassCullDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+
+		if (vkAllocateDescriptorSets(device, &allocInfo, grassCullDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate grassCullDescriptorSets!");
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			VkDescriptorBufferInfo drawIndirectInfo{};
+			drawIndirectInfo.buffer = grassIndirectDrawBuffers[i];
+			drawIndirectInfo.offset = 0;
+			drawIndirectInfo.range = sizeof(drawIndirectBufferObject);
+
+			VkDescriptorBufferInfo culledPosInfo{};
+			culledPosInfo.buffer = uGrassPositionBuffers[i];
+			culledPosInfo.offset = 0;
+			culledPosInfo.range = VK_WHOLE_SIZE;
+
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet = grassCullDescriptorSets[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &drawIndirectInfo;
+
+			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet = grassCullDescriptorSets[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			descriptorWrites[1].descriptorCount = 1;
+			descriptorWrites[1].pBufferInfo = &culledPosInfo;
+
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+		}
+	}
+
 	void createCommandBuffers() {
 		commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -3048,6 +3184,54 @@ private:
 			throw std::runtime_error("Failed to begin recording command buffer!");
 		}
 
+		vkCmdFillBuffer(commandBuffer, grassIndirectDrawBuffers[currentFrame], 4, 4, 0);
+		vkCmdFillBuffer(commandBuffer, grassIndirectDrawBuffers[currentFrame], 24, 4, 0);
+		vkCmdFillBuffer(commandBuffer, grassIndirectDrawBuffers[currentFrame], 44, 4, 0);
+
+		VkBufferMemoryBarrier fillBarrier{};
+		fillBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		fillBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		fillBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+		fillBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		fillBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		fillBarrier.buffer = grassIndirectDrawBuffers[currentFrame];
+		fillBarrier.offset = 0;
+		fillBarrier.size = VK_WHOLE_SIZE;
+
+		vkCmdPipelineBarrier(commandBuffer,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			0, 0, nullptr, 1, &fillBarrier, 0, nullptr);
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassCullingComputePipeline);
+
+		std::array<VkDescriptorSet, 2> cullingDescriptorSets = { grassDescriptorSets[currentFrame], grassCullDescriptorSets[currentFrame] };
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassCullingComputePipelineLayout, 0, 2, cullingDescriptorSets.data(), 0, nullptr);
+		
+		vkCmdDispatch(commandBuffer, GRASS_BLADE_COUNT / 256, 1, 1);
+
+		std::array<VkBufferMemoryBarrier, 2> barriers{};
+
+		barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		barriers[0].dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+		barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barriers[0].buffer = grassIndirectDrawBuffers[currentFrame];
+		barriers[0].offset = 0;
+		barriers[0].size = VK_WHOLE_SIZE;
+
+		barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		barriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barriers[1].buffer = uGrassCulledPositionBuffers[currentFrame];
+		barriers[1].offset = 0;
+		barriers[1].size = VK_WHOLE_SIZE;
+
+		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT, 0, 0, nullptr, static_cast<uint32_t>(barriers.size()), barriers.data(), 0, nullptr);
+
 		VkRenderPassBeginInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassInfo.renderPass = renderTextureRenderPass;
@@ -3061,7 +3245,7 @@ private:
 		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		renderPassInfo.pClearValues = clearValues.data();
 
-		VkBuffer vertexBuffers[] = { grassVertexBuffer, groundVertexBuffer, skyboxVertexBuffer };
+		VkBuffer vertexBuffers[] = { grassVertexBuffer, groundVertexBuffer, skyboxVertexBuffer, grassVertexLowBuffer };
 		VkDeviceSize offsets[] = { 0 };
 
 		VkViewport viewport{};
@@ -3079,8 +3263,7 @@ private:
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
-
+		
 		if (renderWithMesh) {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
 
@@ -3092,7 +3275,7 @@ private:
 			}
 
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
-			cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
+			cmdDrawMeshTasksIndirectEXT(commandBuffer, grassIndirectDrawBuffers[currentFrame], sizeof(VkDrawIndexedIndirectCommand) * 2, 1, 0);
 		}
 		else {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
@@ -3104,9 +3287,15 @@ private:
 				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
 			}
 
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[0], offsets);
 			vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT * 4, 0, 0, 0);
+			//vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT * 4, 0, 0, 0);
+			vkCmdDrawIndexedIndirect(commandBuffer, grassIndirectDrawBuffers[currentFrame], 0, 1, sizeof(drawIndirectBufferObject) * 2);
+
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[3], offsets);
+			vkCmdBindIndexBuffer(commandBuffer, grassIndexLowBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexedIndirect(commandBuffer, grassIndirectDrawBuffers[currentFrame], sizeof(VkDrawIndexedIndirectCommand), 1, sizeof(drawIndirectBufferObject) * 2);
 		}
 
 
@@ -3262,6 +3451,12 @@ private:
 
 		if (!cmdSetPolygonModeEXT) {
 			throw std::runtime_error("Failed to load setPolygonMode");
+		}
+
+		cmdDrawMeshTasksIndirectEXT = (PFN_vkCmdDrawMeshTasksIndirectEXT)vkGetDeviceProcAddr(device, "vkCmdDrawMeshTasksIndirectEXT");
+
+		if (!cmdDrawMeshTasksIndirectEXT) {
+			throw std::runtime_error("Failed to load cmdDrawMeshTasksIndirectEXT");
 		}
 	}
 
@@ -3651,8 +3846,8 @@ private:
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassPositionComputePipeline);
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			std::array<VkDescriptorSet, 2> descriptorSets = { grassDescriptorSets[i], groundDescriptorSets[i] };
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassPositionComputePipelineLayout, 0, 2, descriptorSets.data(), 0, nullptr);
+			std::array<VkDescriptorSet, 3> descriptorSets = { grassDescriptorSets[i], groundDescriptorSets[i], grassCullDescriptorSets[i]};
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassPositionComputePipelineLayout, 0, 3, descriptorSets.data(), 0, nullptr);
 			vkCmdDispatch(commandBuffer, GRASS_BLADE_COUNT, 1, 1);
 		}
 
@@ -3700,6 +3895,12 @@ private:
 
 			vkDestroyBuffer(device, uGrassPositionBuffers[i], nullptr);
 			vkFreeMemory(device, uGrassPositionBuffersMemory[i], nullptr);
+
+			vkDestroyBuffer(device, uGrassCulledPositionBuffers[i], nullptr);
+			vkFreeMemory(device, uGrassCulledPositionBuffersMemory[i], nullptr);
+
+			vkDestroyBuffer(device, grassIndirectDrawBuffers[i], nullptr);
+			vkFreeMemory(device, grassIndirectDrawBufferMemory[i], nullptr);
 		}
 
 		ImGui_ImplVulkan_Shutdown();
@@ -3710,8 +3911,10 @@ private:
 		vkDestroyDescriptorPool(device, groundDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, skyboxDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, imGUIDescriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, grassCullDescriptorPool, nullptr);
 
 		vkDestroyDescriptorSetLayout(device, grassDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, grassCullingDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, groundDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, skyboxDescriptorSetLayout, nullptr);
 
@@ -3743,6 +3946,8 @@ private:
 		vkDestroyPipelineLayout(device, groundPipelineLayout, nullptr);
 		vkDestroyPipeline(device, skyboxGraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(device, skyboxPipelineLayout, nullptr);
+		vkDestroyPipeline(device, grassCullingComputePipeline, nullptr);
+		vkDestroyPipelineLayout(device, grassCullingComputePipelineLayout, nullptr);
 
 		vkDestroyRenderPass(device, presentationRenderPass, nullptr);
 		vkDestroyRenderPass(device, renderTextureRenderPass, nullptr);

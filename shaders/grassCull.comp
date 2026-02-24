@@ -7,10 +7,145 @@ struct blade{
     vec2 worldSpaceUV;
 };
 
-layout(std430, set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
+layout(std430, set = 1, binding = 1) buffer bufferGrassPositionsSSBO{
     blade bladeInfo[grassCount];
 }ssbo;
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform UniformBufferObject {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+} ubo;
+
+layout(set = 0, binding = 1) uniform GrassDataBufferObject{
+	float elapsedTime;
+	float grassLean;
+	float grassHeight;
+	float bladeThickness;
+	float curveStrength;
+	float windLeanStrength;
+	float windSpeed;
+	float windOffsetStrength;
+	float windDirection;
+	float maxDistance;
+	float padding1;
+	float padding2;
+	vec4 camPosition;
+	vec4 bezierEndPoint;
+} gdbo;
+
+layout(std430, set = 0, binding = 2) buffer bufferGrassCulledPositionsSSBO{
+    blade bladeInfoHighLod[grassCount];
+    blade bladeInfoLowLod[grassCount];
+}ssboCulled;
+
+struct indirectDrawCall{
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+struct indirectMeshDrawCall{
+   uint countX;
+   uint countY;
+   uint countZ;
+};
+
+layout(set = 1, binding = 0) buffer indirectDrawBuffer{
+    indirectDrawCall highLod;
+    indirectDrawCall lowLod;
+    indirectMeshDrawCall meshDrawCall;
+} indirectDraw;
+
+// https://github.com/SaschaWillems/Vulkan/blob/master/base/frustum.hpp
+void extractFrustumPlanes(mat4 vp, out vec4 planes[6]){
+    // Left
+    planes[0] = vec4(
+        vp[0][3] + vp[0][0],
+        vp[1][3] + vp[1][0],
+        vp[2][3] + vp[2][0],
+        vp[3][3] + vp[3][0]
+    );
+    // Right
+    planes[1] = vec4(
+        vp[0][3] - vp[0][0],
+        vp[1][3] - vp[1][0],
+        vp[2][3] - vp[2][0],
+        vp[3][3] - vp[3][0]
+    );
+    // Bottom
+    planes[2] = vec4(
+        vp[0][3] + vp[0][1],
+        vp[1][3] + vp[1][1],
+        vp[2][3] + vp[2][1],
+        vp[3][3] + vp[3][1]
+    );
+    // Top
+    planes[3] = vec4(
+        vp[0][3] - vp[0][1],
+        vp[1][3] - vp[1][1],
+        vp[2][3] - vp[2][1],
+        vp[3][3] - vp[3][1]
+    );
+    // Near
+    planes[4] = vec4(
+        vp[0][3] + vp[0][2],
+        vp[1][3] + vp[1][2],
+        vp[2][3] + vp[2][2],
+        vp[3][3] + vp[3][2]
+    );
+    // Far
+    planes[5] = vec4(
+        vp[0][3] - vp[0][2],
+        vp[1][3] - vp[1][2],
+        vp[2][3] - vp[2][2],
+        vp[3][3] - vp[3][2]
+    );
+
+    for(int i = 0; i < 6; i++){
+        float length = sqrt(planes[i].x * planes[i].x + planes[i].y * planes[i].y + planes[i].z * planes[i].z);
+		planes[i] /= length;
+    }
+}
+
+bool isInsideFrustum(vec3 worldPos, vec4 planes[6]){
+    float radius = 5;
+
+    for(int i = 0; i < 6; i++){
+        if ((planes[i].x * worldPos.x) + (planes[i].y * worldPos.y) + (planes[i].z * worldPos.z) + planes[i].w <= -radius)
+		{
+			return false;
+		}
+    }
+    return true;
+}
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main(){
+    uint overallWorkGroupID = gl_GlobalInvocationID.x;
+
+    ssbo.bladeInfo[overallWorkGroupID].position.w = overallWorkGroupID;
+
+    mat4 viewProjMat = ubo.proj * ubo.view;
+
+    vec4 frustumPlanes[6];
+    extractFrustumPlanes(viewProjMat, frustumPlanes);
+
+    vec3 worldPos = ssbo.bladeInfo[overallWorkGroupID].position.xyz;
+
+        if(!isInsideFrustum(worldPos, frustumPlanes)){
+            return;
+        }
+
+    float dist = length(gdbo.camPosition.xyz - worldPos);
+
+    if(dist < gdbo.maxDistance){
+        uint index = atomicAdd(indirectDraw.highLod.instanceCount, 4);
+        ssboCulled.bladeInfoHighLod[index / 4] = ssbo.bladeInfo[overallWorkGroupID];
+    } else {
+        uint index = atomicAdd(indirectDraw.lowLod.instanceCount, 4);
+        ssboCulled.bladeInfoLowLod[index / 4] = ssbo.bladeInfo[overallWorkGroupID];
+    }
 }

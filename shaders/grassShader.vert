@@ -1,10 +1,11 @@
 #version 460
 
-const uint grassCount = 65536 * 16;
+const uint grassCount = 65536 * 4;
 const float RANDOM_HEIGHT_SCALE = 0.7;
 const float PI = 3.1415;
 const float spacing = 1;
 const int highLODVerts = 16;
+const int lowLODVerts = 3;
 
 
 layout(binding = 0) uniform UniformBufferObject {
@@ -36,7 +37,8 @@ struct blade{
 };
 
 layout(std430, set = 0, binding = 2) readonly buffer GrassPositionsSSBOIn{
-	blade bladeInfo[grassCount];
+	blade bladeInfoHighLod[grassCount];
+    blade bladeInfoLowLod[grassCount];
 } ssbo;
 
 layout(binding = 4) uniform sampler2D noiseSampler;
@@ -183,18 +185,30 @@ float randomAngle(int instanceIndex){
 
 void main() {
 	vec3 vertPos = inPosition;
-	const int bufferIndex = gl_InstanceIndex / 4;
-	const vec4 bladePos = ssbo.bladeInfo[bufferIndex].position;
-	const vec2 bladeUV = ssbo.bladeInfo[bufferIndex].worldSpaceUV;
+
+	int bufferIndex = (gl_InstanceIndex - gl_BaseInstance) / 4;
+	int verts = (gl_BaseInstance == 0) ? highLODVerts : lowLODVerts;
+	vec4 bladePos;
+	vec2 bladeUV;
+
+	if(gl_BaseInstance == 0){
+		bladePos = ssbo.bladeInfoHighLod[bufferIndex].position;
+		bladeUV = ssbo.bladeInfoHighLod[bufferIndex].worldSpaceUV;
+	} else {
+		bladePos = ssbo.bladeInfoLowLod[bufferIndex].position;
+		bladeUV = ssbo.bladeInfoLowLod[bufferIndex].worldSpaceUV;
+	}
 	const vec3 bladeNormal = vec3(0, 1, 0);
 
-	const uint seed = CombineSeed(uint(bladePos.x), uint(bladePos.z));
+	const uint seed = CombineSeed(uint(bladePos.x) + uint(bladePos.w) + int(texture(noiseSampler, bladeUV * 15).r * 100), uint(bladePos.z) + uint(bladePos.w) + int(texture(noiseSampler, bladeUV * 15).r * 100));
+
+	float distanceFromCam = abs(length(gdbo.camPosition.xyz - bladePos.xyz));
 
 	float grassLeanStrength = gdbo.grassLean * gdbo.windLeanStrength * texture(noiseSampler, (bladeUV * 3.0) - (gdbo.elapsedTime * vec2(cos(gdbo.windDirection), sin(gdbo.windDirection)) * gdbo.windSpeed)).r;
-	float bladeDirectionAngle = mix(2.0 * PI * Random(seed, 4, gl_InstanceIndex), gdbo.windDirection, 0.9);
+	float bladeDirectionAngle = mix(2.0 * PI * Random(seed, 4, int(bladePos.w) + int(bladePos.z)), gdbo.windDirection, 0.9);
 	vec2 bladeDirection = vec2(cos(bladeDirectionAngle), sin(bladeDirectionAngle)) * gdbo.grassHeight * grassLeanStrength;
 	
-	const float height = gdbo.grassHeight + float(Random(seed, gl_InstanceIndex, 20)) * RANDOM_HEIGHT_SCALE;
+	const float height = gdbo.grassHeight + float(Random(seed, uint(bladePos.x) + uint(bladePos.w), 20)) * RANDOM_HEIGHT_SCALE;
 
 	vec3 tangent = normalize(cross(vec3(0, 0, 1), bladeNormal));
 	vec3 biTangent = normalize(cross(bladeNormal, tangent));
@@ -202,8 +216,8 @@ void main() {
 	vec3 sideVec = normalize(vec3(bladeDirection.y, 0.0, -bladeDirection.x));
 	vec3 offset = tsign(gl_VertexIndex, 0) * gdbo.bladeThickness * sideVec;
 
-	float offsetAngle = 2.0 * PI * Random(seed, gl_InstanceIndex);
-	float offsetRadius = spacing * sqrt(Random(seed, 19, gl_InstanceIndex));
+	float offsetAngle = 2.0 * PI * Random(seed, int(bladePos.x) + int(bladePos.w), int(bladePos.w));
+	float offsetRadius = spacing * sqrt(Random(seed, 19, int(bladePos.w) + int(bladePos.z)));
 	vec3 bladeOffset = offsetRadius * (cos(offsetAngle) * tangent + sin(offsetAngle) * vec3(0, 0, 1));
 	
 
@@ -218,7 +232,7 @@ void main() {
 	p1 += offset * 0.9;
 	
 	int edgeID = gl_VertexIndex / 2;
-	float t = (edgeID == highLODVerts - 1) ? 1.0 : float(edgeID) / float(highLODVerts - 1);
+	float t = (edgeID == verts - 1) ? 1.0 : float(edgeID) / float(highLODVerts - 1);
 	vec3 vertexNormal = normalize(cross(sideVec, normalize(bezierDerivative(p0, p1, p2, t))));
 	//vec3 windOffset = vertexNormal * (sin(t + bladeID + gdbo.elapsedTime * gdbo.windSpeed) - 0.5) * texture(noiseSampler, (clumpUV * 3.0) + (gdbo.elapsedTime * gdbo.windSpeed)).r * (t * t) * gdbo.windOffsetStrength;
 	vec3 vertexPos = bezier(p0, p1, p2, t);
@@ -232,10 +246,14 @@ void main() {
 		fragColour = vec3(1, 1, 1);
 	}
 	else if(colourOut == 2){
-		fragColour = vec3(1);
+		if(gl_BaseInstance == 0){
+			fragColour = vec3(1);		
+		} else {
+			fragColour = vec3(0.3);					
+		}
 	}
 	else if(colourOut == 3){
-		fragColour = vec3(Random(bufferIndex), Random(bufferIndex + 1), Random(bufferIndex + 2));
+		fragColour = vec3(Random(int(bladePos.x) + int(bladePos.z)), Random(int(bladePos.x) + int(bladePos.z) + 1), Random(int(bladePos.x) + int(bladePos.z) + 2));
 	}
 	else if(colourOut == 4){
 		fragColour = vec3(1, 1, 1);

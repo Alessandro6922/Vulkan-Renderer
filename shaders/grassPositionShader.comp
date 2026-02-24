@@ -21,7 +21,7 @@ struct blade{
     vec2 worldSpaceUV;
 };
 
-layout(std430, set = 0, binding = 2) buffer bufferGrassPositionsSSBO{
+layout(std430, set = 2, binding = 1) buffer bufferGrassPositionsSSBO{
     blade bladeInfo[grassCount];
 }ssbo;
 
@@ -67,7 +67,6 @@ void main(){
     float windDirectionAngle = 6.0;
 
     float rotation = mix(mix(randomRotation, sampledRotation, 0.3), windDirectionAngle, 0.8);
-
     ssbo.bladeInfo[threadID].position = vec4(finalX, height, finalZ, rotation);
     ssbo.bladeInfo[threadID].worldSpaceUV = uv;
 }

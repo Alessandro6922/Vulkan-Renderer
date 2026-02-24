@@ -1,7 +1,7 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
 
-const uint grassCount = 65536 * 16 * 4;
+const uint grassCount = 65536 * 4;
 const float RANDOM_HEIGHT_SCALE = 0.7;
 const uint clumpRadius = 1;
 const float spacing = 1;
@@ -36,7 +36,7 @@ struct blade{
 };
 
 layout(std430, set = 0, binding = 2) readonly buffer GrassPositionsSSBOIn{
-	blade bladeInfo[grassCount];
+	blade bladeInfo[grassCount * 2];
 } ssbo;
 
 layout(set = 0, binding = 4) uniform sampler2D noiseSampler;
@@ -190,8 +190,9 @@ void main(){
 	vec3 clumpCentre = ssbo.bladeInfo[overallWorkGroupID].position.xyz;
 	//const vec3 clumpNormal = texture(normalSampler, ssbo.bladeInfo[overallWorkGroupID].worldSpaceUV).rgb;
 	const vec3 clumpNormal = vec3(0, 1, 0);
-	const vec2 clumpUV = ssbo.bladeInfo[overallWorkGroupID].worldSpaceUV;
-	const uint seed = CombineSeed(uint(int(clumpCentre.x / spacing)), uint(int(clumpCentre.z / spacing)));
+	vec2 clumpUV = ssbo.bladeInfo[overallWorkGroupID].worldSpaceUV;
+	const vec2 noiseSample = texture(noiseSampler, clumpUV).rg;
+	const uint seed = CombineSeed(int(noiseSample.r * 1000), int(clumpCentre.x * 1000), int(clumpCentre.z * 1000));
 
 	const int maxVerticesPerBladeEdge = 16;
 	const int minVerticesPerBladeEdge = 3;
