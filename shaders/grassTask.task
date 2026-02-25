@@ -1,39 +1,22 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
 
-//layout(set = 0, binding = 1) uniform GrassDataBufferObject{
-//	float elapsedTime;
-//	float grassLean;
-//	float grassHeight;
-//	float bladeThickness;
-//	vec4 controlPointPull;
-//	vec4 bezierCPoint2;
-//	vec4 bezierEndPoint;
-//} gdbo;
-//
-//struct meshTaskPayload {
-//	vec3 col;
-//};
-//
-//taskPayloadSharedEXT meshTaskPayload payload;
-//
-//uint Hash(uint seed)
-//{
-//	seed = (seed ^ 61u) ^ (seed >> 16u);
-//	seed *= 9u;
-//	seed = seed ^ (seed >> 4u);
-//	seed *= 0x27d4eb2du;
-//	seed = seed ^ (seed >> 15u);
-//	return seed;
-//}
-//
-//float Random(uint seed)
-//{
-//	return Hash(seed) / float(~0u);
-//}
+struct indirectDrawCall{
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+layout(set = 1, binding = 0) buffer indirectDrawBuffer{
+    indirectDrawCall highLod;
+    indirectDrawCall lowLod;
+} indirectDraw;
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main(){
-	//payload.col = vec3(Random(uint(gdbo.elapsedTime)), Random(uint(gdbo.elapsedTime)), Random(uint(gdbo.elapsedTime)));
-	EmitMeshTasksEXT(256, 256, 4);
+    uint totalBladeCount = indirectDraw.highLod.instanceCount + indirectDraw.lowLod.instanceCount;
+    uint dim = uint(ceil(pow(totalBladeCount, 1.0 / 3.0)));
+	EmitMeshTasksEXT(totalBladeCount, 1, 1);
 }

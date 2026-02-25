@@ -314,7 +314,6 @@ const char* grassColOptions[] = { "lit", "Unlit", "Lod", "Clump", "Wireframe" };
 struct drawIndirectBufferObject {
 	VkDrawIndexedIndirectCommand highLodDraw;
 	VkDrawIndexedIndirectCommand lowLodDraw;
-	VkDrawMeshTasksIndirectCommandEXT meshDrawCall;
 };
 
 // The program gets wrapped into a class
@@ -661,7 +660,7 @@ private:
 		uGrassIndirectDrawBinding.descriptorCount = 1;
 		uGrassIndirectDrawBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		uGrassIndirectDrawBinding.pImmutableSamplers = nullptr;
-		uGrassIndirectDrawBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		uGrassIndirectDrawBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
 		VkDescriptorSetLayoutBinding uGrassPositionBinding{};
 		uGrassPositionBinding.binding = 1;
@@ -1155,7 +1154,7 @@ private:
 		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 		dynamicState.pDynamicStates = dynamicStates.data();
 
-		std::array<VkDescriptorSetLayout, 2> layouts = { grassDescriptorSetLayout, groundDescriptorSetLayout };
+		std::array<VkDescriptorSetLayout, 2> layouts = { grassDescriptorSetLayout, grassCullingDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -2707,11 +2706,6 @@ private:
 		grassIndirectDrawBufferMemory.resize(MAX_FRAMES_IN_FLIGHT);
 		grassIndirectDrawBufferMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-		VkDrawMeshTasksIndirectCommandEXT drawIndirectMeshCmd{};
-		drawIndirectMeshCmd.groupCountX = 1;
-		drawIndirectMeshCmd.groupCountY = 1;
-		drawIndirectMeshCmd.groupCountZ = 1;
-
 		VkDrawIndexedIndirectCommand drawIndirectCmd{};
 		drawIndirectCmd.indexCount = static_cast<uint32_t>(grassIndices.size());
 		drawIndirectCmd.instanceCount = GRASS_BLADE_COUNT * 2;
@@ -2729,7 +2723,6 @@ private:
 		drawIndirectBufferObject ibo{};
 		ibo.highLodDraw = drawIndirectCmd;
 		ibo.lowLodDraw = drawIndirectLODCmd;
-		ibo.meshDrawCall = drawIndirectMeshCmd;
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			createBuffer(indirectDrawBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, grassIndirectDrawBuffers[i], grassIndirectDrawBufferMemory[i]);
@@ -3186,7 +3179,6 @@ private:
 
 		vkCmdFillBuffer(commandBuffer, grassIndirectDrawBuffers[currentFrame], 4, 4, 0);
 		vkCmdFillBuffer(commandBuffer, grassIndirectDrawBuffers[currentFrame], 24, 4, 0);
-		vkCmdFillBuffer(commandBuffer, grassIndirectDrawBuffers[currentFrame], 44, 4, 0);
 
 		VkBufferMemoryBarrier fillBarrier{};
 		fillBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -3198,17 +3190,14 @@ private:
 		fillBarrier.offset = 0;
 		fillBarrier.size = VK_WHOLE_SIZE;
 
-		vkCmdPipelineBarrier(commandBuffer,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-			0, 0, nullptr, 1, &fillBarrier, 0, nullptr);
+		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 0, nullptr);
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassCullingComputePipeline);
 
 		std::array<VkDescriptorSet, 2> cullingDescriptorSets = { grassDescriptorSets[currentFrame], grassCullDescriptorSets[currentFrame] };
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, grassCullingComputePipelineLayout, 0, 2, cullingDescriptorSets.data(), 0, nullptr);
 		
-		vkCmdDispatch(commandBuffer, GRASS_BLADE_COUNT / 256, 1, 1);
+		vkCmdDispatch(commandBuffer, (GRASS_BLADE_COUNT / 256) / 256, 256, 1);
 
 		std::array<VkBufferMemoryBarrier, 2> barriers{};
 
@@ -3274,8 +3263,8 @@ private:
 				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
 			}
 
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
-			cmdDrawMeshTasksIndirectEXT(commandBuffer, grassIndirectDrawBuffers[currentFrame], sizeof(VkDrawIndexedIndirectCommand) * 2, 1, 0);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, cullingDescriptorSets.data(), 0, nullptr);
+			cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
 		}
 		else {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);

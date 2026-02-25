@@ -40,7 +40,6 @@ layout(std430, set = 0, binding = 2) readonly buffer GrassPositionsSSBOIn{
 } ssbo;
 
 layout(set = 0, binding = 4) uniform sampler2D noiseSampler;
-layout(set = 1, binding = 2) uniform sampler2D normalSampler;
 
 //struct meshTaskPayload {
 //	vec3 col;

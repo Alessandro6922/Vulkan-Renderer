@@ -47,16 +47,9 @@ struct indirectDrawCall{
     uint firstInstance;
 };
 
-struct indirectMeshDrawCall{
-   uint countX;
-   uint countY;
-   uint countZ;
-};
-
 layout(set = 1, binding = 0) buffer indirectDrawBuffer{
     indirectDrawCall highLod;
     indirectDrawCall lowLod;
-    indirectMeshDrawCall meshDrawCall;
 } indirectDraw;
 
 // https://github.com/SaschaWillems/Vulkan/blob/master/base/frustum.hpp
@@ -122,9 +115,9 @@ bool isInsideFrustum(vec3 worldPos, vec4 planes[6]){
     return true;
 }
 
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 void main(){
-    uint overallWorkGroupID = gl_GlobalInvocationID.x;
+    uint overallWorkGroupID =  gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x);
 
     ssbo.bladeInfo[overallWorkGroupID].position.w = overallWorkGroupID;
 
