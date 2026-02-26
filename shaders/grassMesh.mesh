@@ -35,8 +35,22 @@ struct blade{
     vec2 worldSpaceUV;
 };
 
+struct indirectDrawCall{
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+layout(set = 1, binding = 0) buffer indirectDrawBuffer{
+    indirectDrawCall highLod;
+    indirectDrawCall lowLod;
+} indirectDraw;
+
 layout(std430, set = 0, binding = 2) readonly buffer GrassPositionsSSBOIn{
-	blade bladeInfo[grassCount * 2];
+	blade bladeInfoHighLod[grassCount];
+    blade bladeInfoLowLod[grassCount];
 } ssbo;
 
 layout(set = 0, binding = 4) uniform sampler2D noiseSampler;
@@ -186,10 +200,26 @@ layout(max_vertices = 256, max_primitives = 192) out;
 void main(){
 	uint overallWorkGroupID = (gl_WorkGroupID.x + (gl_WorkGroupID.y * gl_NumWorkGroups.x) + (gl_WorkGroupID.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x));
 
-	vec3 clumpCentre = ssbo.bladeInfo[overallWorkGroupID].position.xyz;
+	uint highLodCount = indirectDraw.highLod.instanceCount / 4;
+	uint lowLodCount = indirectDraw.lowLod.instanceCount / 4;
+
+	if(overallWorkGroupID >= (highLodCount + lowLodCount)){
+		return;
+	}
+
+	vec3 clumpCentre;
+	vec2 clumpUV;
+
+	if(overallWorkGroupID < highLodCount) { 
+		clumpCentre = ssbo.bladeInfoHighLod[overallWorkGroupID].position.xyz;	
+		clumpUV = ssbo.bladeInfoHighLod[overallWorkGroupID].worldSpaceUV;
+	} else {
+		clumpCentre = ssbo.bladeInfoLowLod[overallWorkGroupID - highLodCount].position.xyz;	
+		clumpUV = ssbo.bladeInfoLowLod[overallWorkGroupID - highLodCount].worldSpaceUV;
+	}
+
 	//const vec3 clumpNormal = texture(normalSampler, ssbo.bladeInfo[overallWorkGroupID].worldSpaceUV).rgb;
 	const vec3 clumpNormal = vec3(0, 1, 0);
-	vec2 clumpUV = ssbo.bladeInfo[overallWorkGroupID].worldSpaceUV;
 	const vec2 noiseSample = texture(noiseSampler, clumpUV).rg;
 	const uint seed = CombineSeed(int(noiseSample.r * 1000), int(clumpCentre.x * 1000), int(clumpCentre.z * 1000));
 

@@ -3266,7 +3266,7 @@ private:
 				cmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
 			}
 
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 1, cullingDescriptorSets.data(), 0, nullptr);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 2, cullingDescriptorSets.data(), 0, nullptr);
 			cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
 		}
 		else {
@@ -3916,6 +3916,12 @@ private:
 
 		vkDestroyBuffer(device, grassVertexBuffer, nullptr);
 		vkFreeMemory(device, grassVertexBufferMemory, nullptr);
+
+		vkDestroyBuffer(device, grassIndexLowBuffer, nullptr);
+		vkFreeMemory(device, grassIndexLowBufferMemory, nullptr);
+
+		vkDestroyBuffer(device, grassVertexLowBuffer, nullptr);
+		vkFreeMemory(device, grassVertexLowBufferMemory, nullptr);
 
 		vkDestroyBuffer(device, groundIndexBuffer, nullptr);
 		vkFreeMemory(device, groundIndexBufferMemory, nullptr);
