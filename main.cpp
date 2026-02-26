@@ -287,7 +287,7 @@ struct uGrassBufferObject {
 	float windOffsetStrength;
 	float windDirection;
 	float minLODDistance;
-	float padding1;
+	float fCullRadius;
 	float padding2;
 	glm::vec4 camPosition;
 	glm::vec4 bezierEndPoint;
@@ -304,6 +304,7 @@ struct GrassParameters {
 	float windOffsetStrength;
 	float windDirection;
 	float minLODDistance;
+	int fCullRadius;
 	int grassColourOutput;
 	glm::vec4 camPosition;
 	glm::vec4 bezierEndPoint;
@@ -618,6 +619,7 @@ private:
 		grassParameters.grassColourOutput = 0;
 		grassParameters.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0);
 		grassParameters.bezierEndPoint = glm::vec4(0.0f, 1.2f, 1.2f, 3.0f);
+		grassParameters.fCullRadius = 4;
 	}
 
 	void initVulkan() {
@@ -2796,6 +2798,7 @@ private:
 		gbo.minLODDistance = grassParameters.minLODDistance;
 		gbo.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, static_cast<float>(grassParameters.grassColourOutput));
 		gbo.bezierEndPoint = grassParameters.bezierEndPoint;
+		gbo.fCullRadius = static_cast<float>(grassParameters.fCullRadius);
 
 		memcpy(uGrassDataBuffersMapped[currentImage], &gbo, sizeof(gbo));
 	}
@@ -3789,6 +3792,7 @@ private:
 
 		ImGui::Begin("Render Options");
 		ImGui::Checkbox("Use Mesh Shaders? ", &renderWithMesh);
+		ImGui::SliderInt("Culling Radius", &grassParameters.fCullRadius, -4, 4);
 		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
 		ImGui::Combo("Grass Col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
 		ImGui::End();

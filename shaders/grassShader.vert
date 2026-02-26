@@ -25,7 +25,7 @@ layout(set = 0, binding = 1) uniform GrassDataBufferObject{
 	float windOffsetStrength;
 	float windDirection;
 	float maxDistance;
-	float padding1;
+	float fCullRadius;
 	float padding2;
 	vec4 camPosition;
 	vec4 bezierEndPoint;
@@ -187,6 +187,7 @@ void main() {
 	vec3 vertPos = inPosition;
 
 	int bufferIndex = (gl_InstanceIndex - gl_BaseInstance) / 4;
+	int instanceOffset = (gl_InstanceIndex % 4);
 	int verts = (gl_BaseInstance == 0) ? highLODVerts : lowLODVerts;
 	vec4 bladePos;
 	vec2 bladeUV;
@@ -200,7 +201,7 @@ void main() {
 	}
 	const vec3 bladeNormal = vec3(0, 1, 0);
 
-	const uint seed = CombineSeed(uint(bladePos.x) + uint(bladePos.w) + int(texture(noiseSampler, bladeUV * 15).r * 100), uint(bladePos.z) + uint(bladePos.w) + int(texture(noiseSampler, bladeUV * 15).r * 100));
+	const uint seed = CombineSeed(uint(bladePos.x) + uint(bladePos.w) + int(texture(noiseSampler, bladeUV * 15).r * 100) * instanceOffset, uint(bladePos.z) + uint(bladePos.w) * instanceOffset);
 
 	float distanceFromCam = abs(length(gdbo.camPosition.xyz - bladePos.xyz));
 
@@ -216,7 +217,7 @@ void main() {
 	vec3 sideVec = normalize(vec3(bladeDirection.y, 0.0, -bladeDirection.x));
 	vec3 offset = tsign(gl_VertexIndex, 0) * gdbo.bladeThickness * sideVec;
 
-	float offsetAngle = 2.0 * PI * Random(seed, int(bladePos.x) + int(bladePos.w), int(bladePos.w));
+	float offsetAngle = 2.0 * PI * Random(seed, int(bladePos.x) * instanceOffset, int(bladePos.w));
 	float offsetRadius = spacing * sqrt(Random(seed, 19, int(bladePos.w) + int(bladePos.z)));
 	vec3 bladeOffset = offsetRadius * (cos(offsetAngle) * tangent + sin(offsetAngle) * vec3(0, 0, 1));
 	

@@ -28,7 +28,7 @@ layout(set = 0, binding = 1) uniform GrassDataBufferObject{
 	float windOffsetStrength;
 	float windDirection;
 	float maxDistance;
-	float padding1;
+	float fCullRadius;
 	float padding2;
 	vec4 camPosition;
 	vec4 bezierEndPoint;
@@ -104,10 +104,8 @@ void extractFrustumPlanes(mat4 vp, out vec4 planes[6]){
 }
 
 bool isInsideFrustum(vec3 worldPos, vec4 planes[6]){
-    float radius = 5;
-
     for(int i = 0; i < 6; i++){
-        if ((planes[i].x * worldPos.x) + (planes[i].y * worldPos.y) + (planes[i].z * worldPos.z) + planes[i].w <= -radius)
+        if ((planes[i].x * worldPos.x) + (planes[i].y * worldPos.y) + (planes[i].z * worldPos.z) + planes[i].w <= -gdbo.fCullRadius)
 		{
 			return false;
 		}
