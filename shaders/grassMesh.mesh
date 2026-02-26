@@ -204,6 +204,7 @@ void main(){
 	uint lowLodCount = indirectDraw.lowLod.instanceCount / 4;
 
 	if(overallWorkGroupID >= (highLodCount + lowLodCount)){
+		SetMeshOutputsEXT(0, 0);
 		return;
 	}
 
@@ -280,9 +281,9 @@ void main(){
 		int edgeID = vertIDLocal / 2;
 		float t = (edgeID == actualVerticesPerBladeEdge - 1) ? 1.0 : float(edgeID) / float(actualVerticesPerBladeEdge - 1);
 		vec3 vertexNormal = normalize(cross(sideVec, normalize(bezierDerivative(p0, p1, p2, t))));
-		vec3 windOffset = vertexNormal * (sin(t + bladeID + gdbo.elapsedTime * gdbo.windSpeed) - 0.5) * texture(noiseSampler, (clumpUV * 3.0) + (gdbo.elapsedTime * gdbo.windSpeed)).r * (t * t) * gdbo.windOffsetStrength;
+		//vec3 windOffset = vertexNormal * (sin(t + bladeID + gdbo.elapsedTime * gdbo.windSpeed) - 0.5) * texture(noiseSampler, (clumpUV * 3.0) + (gdbo.elapsedTime * gdbo.windSpeed)).r * (t * t) * gdbo.windOffsetStrength;
 		vec3 vertexPos = bezier(p0, p1, p2, t);
-		vertexPos += windOffset;
+		//vertexPos += windOffset;
 		gl_MeshVerticesEXT[vertID].gl_Position = ubo.proj * ubo.view * ubo.model * vec4(vertexPos, 1.0);
 		normal[vertID] = mix(vertexNormal, offset, 0.4);
 		fragTexCoord[vertID] = vec2(tsign(vertIDLocal, 0), 1.0 - t);

@@ -16,6 +16,6 @@ layout(set = 1, binding = 0) buffer indirectDrawBuffer{
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main(){
-    uint totalBladeCount = (indirectDraw.highLod.instanceCount / 4 + indirectDraw.lowLod.instanceCount / 4);
+    uint totalBladeCount = (indirectDraw.highLod.instanceCount / 4 + indirectDraw.lowLod.instanceCount / 4) + 1000;
 	EmitMeshTasksEXT(totalBladeCount / 1024, 256, 4);
 }

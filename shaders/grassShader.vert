@@ -233,13 +233,12 @@ void main() {
 	p1 += offset * 0.9;
 	
 	int edgeID = gl_VertexIndex / 2;
-	float t = (edgeID == verts - 1) ? 1.0 : float(edgeID) / float(highLODVerts - 1);
+	float t = (edgeID == verts - 1) ? 1.0 : float(edgeID) / float(verts - 1);
 	vec3 vertexNormal = normalize(cross(sideVec, normalize(bezierDerivative(p0, p1, p2, t))));
-	//vec3 windOffset = vertexNormal * (sin(t + bladeID + gdbo.elapsedTime * gdbo.windSpeed) - 0.5) * texture(noiseSampler, (clumpUV * 3.0) + (gdbo.elapsedTime * gdbo.windSpeed)).r * (t * t) * gdbo.windOffsetStrength;
 	vec3 vertexPos = bezier(p0, p1, p2, t);
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(vertexPos, 1.0);
 	normal = mix(vertexNormal, offset, 0.4);
-	fragTexCoord = inTexCoord;
+	fragTexCoord = vec2(tsign(gl_VertexIndex, 0), 1.0 - t);
 
 	int colourOut = int(gdbo.camPosition.w);
 
