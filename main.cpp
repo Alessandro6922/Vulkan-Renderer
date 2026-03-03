@@ -29,9 +29,13 @@ TODO:
 #include "External/glm/gtc/matrix_transform.hpp"
 #include "External/glm/gtx/hash.hpp"
 
-#include "External/ImGui/imgui.h"
-#include "External/ImGui/imgui_impl_glfw.h"
-#include "External/ImGui/imgui_impl_vulkan.h"
+//#include "External/ImGui/imgui.h"
+//#include "External/ImGui/imgui_impl_glfw.h"
+//#include "External/ImGui/imgui_impl_vulkan.h"
+
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_vulkan.h"
 
 #include "Camera.h"
 
@@ -42,6 +46,16 @@ TODO:
 #include "External/tinyObjLoader/tiny_obj_loader.h"
 
 #define VK_EXT_mesh_shader
+
+#define NOMINMAX
+
+#include "NvPerfPeriodicSamplerVulkan.h"
+#include "NvPerfHudDataModel.h"
+#include "NvPerfHudImPlotRenderer.h"
+#include "nvperf_host_impl.h"
+
+#define RYML_SINGLE_HDR_DEFINE_NOW
+#include <ryml_all.hpp>
 
 const uint32_t WIDTH = 1600;
 const uint32_t HEIGHT = 1200;
@@ -323,6 +337,7 @@ public:
 	void run() {
 		initWindow();
 		initVulkan();
+		initNVPerf();
 		initImGui();
 		initGrassBufferParams();
 		generateGrassPositions();
@@ -517,6 +532,10 @@ private:
 	float dt;
 
 	bool renderWithMesh = false;
+		
+	nv::perf::sampler::PeriodicSamplerTimeHistoryVulkan m_sampler;
+	nv::perf::hud::HudDataModel                        m_hudDataModel;
+	nv::perf::hud::HudImPlotRenderer                   m_hudRenderer;
 
 	void initWindow() {
 		// initialise the GLFW library and tell it not to create an openGL context
@@ -536,6 +555,29 @@ private:
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
 		auto app = reinterpret_cast<VulkanApplication*>(glfwGetWindowUserPointer(window));
 		app->frameBufferResized = true;
+	}
+
+	// basically taken line for line from the documentation
+	void initNVPerf() {
+		m_sampler.Initialize(instance, physicalDevice, device);
+
+		uint32_t samplingFrequencyInHz = 60;
+		uint32_t samplingIntervalInNs = 1000000000 / samplingFrequencyInHz;
+		uint32_t maxDecodeLatencyInNs = 1000000000;
+		uint32_t maxFrameLatency = 5;
+		if (!m_sampler.BeginSession(graphicsQueue, findQueueFamilies(physicalDevice).graphicsandComputeFamily.value(), samplingIntervalInNs, maxDecodeLatencyInNs, maxFrameLatency)) {
+			throw std::runtime_error("Failed to start profiling session!");
+		}
+
+		nv::perf::hud::HudPresets hudPresets;
+		hudPresets.Initialize(m_sampler.GetGpuDeviceIdentifiers().pChipName);
+		m_hudDataModel.Load(hudPresets.GetPreset("Graphics General Triage"));
+
+		double plotTimeWidthInSeconds = 4.0;
+		m_hudDataModel.Initialize(1.0 / samplingFrequencyInHz, plotTimeWidthInSeconds);
+
+		m_sampler.SetConfig(&m_hudDataModel.GetCounterConfiguration());
+		m_hudDataModel.PrepareSampleProcessing(m_sampler.GetCounterData());
 	}
 
 	void createImGuiDescriptorPool() {
@@ -570,6 +612,7 @@ private:
 
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
+		ImPlot::CreateContext();
 
 		bool installGLFWCallbacks = true;
 
@@ -582,24 +625,27 @@ private:
 
 		ImGui_ImplGlfw_InitForVulkan(window, installGLFWCallbacks);
 
-		ImGui::GetStyle().FontScaleMain = 1.0f;
+		//ImGui::GetStyle().FontScaleMain = 1.0f;
 		//ImGui::GetStyle().Colors[ImGuiCol_WindowBg].w = 0.0f;
 		ImGui::StyleColorsDark();
 
 		ImGui_ImplVulkan_InitInfo initInfo{};
-		initInfo.ApiVersion = VK_API_VERSION_1_3;
+		//initInfo.ApiVersion = VK_API_VERSION_1_3;
 		initInfo.Instance = instance;
 		initInfo.PhysicalDevice = physicalDevice;
 		initInfo.Device = device;
-		initInfo.QueueFamily = ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
+		initInfo.QueueFamily = findQueueFamilies(physicalDevice).graphicsandComputeFamily.value();
 		initInfo.Queue = graphicsQueue;
 		initInfo.DescriptorPool = imGUIDescriptorPool;
 		initInfo.MinImageCount = ImGui_ImplVulkanH_GetMinImageCountFromPresentMode(presentMode);
 		initInfo.ImageCount = imageCount;
-		initInfo.PipelineInfoMain.RenderPass = presentationRenderPass;
-		initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+		initInfo.RenderPass = presentationRenderPass;
+		initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
 		ImGui_ImplVulkan_Init(&initInfo);
+
+		nv::perf::hud::HudImPlotRenderer::SetStyle();
+		m_hudRenderer.Initialize(m_hudDataModel);
 
 		renderTextureSet = ImGui_ImplVulkan_AddTexture(textureSampler, renderImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		//ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physicalDevice, device, window, ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice), nullptr, WIDTH, HEIGHT, imageCount, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -3402,6 +3448,16 @@ private:
 		dynamicState3Features.extendedDynamicState3PolygonMode = VK_TRUE;
 		dynamicState3Features.pNext = &deviceFeatures2;
 
+		VkPhysicalDeviceVulkan11Features vulkan11Features{};
+		vulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+		vulkan11Features.shaderDrawParameters = VK_TRUE;
+		vulkan11Features.pNext = &dynamicState3Features;
+
+		VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{};
+		bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+		bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+		bufferDeviceAddressFeatures.pNext = &vulkan11Features;
+
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
@@ -3413,7 +3469,7 @@ private:
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-		createInfo.pNext = &dynamicState3Features;
+		createInfo.pNext = &bufferDeviceAddressFeatures;
 
 		if (enableValidationLayers) {
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -3677,6 +3733,12 @@ private:
 			recreateRenderWindow();
 		}
 
+		m_sampler.DecodeCounters();
+		m_sampler.ConsumeSamples([&](const uint8_t* pCounterDataImage, size_t counterDataImageSize, uint32_t rangeIndex, bool& stop) {stop = false; return m_hudDataModel.AddSample(pCounterDataImage, counterDataImageSize, rangeIndex); });
+		for (auto& frameDelimiter : m_sampler.GetFrameDelimiters()) {
+			m_hudDataModel.AddFrameDelimiter(frameDelimiter.frameEndTime);
+		}
+
 		updateUniformBuffer(currentFrame);
 
 		// fence should only be reset if work is being submitted
@@ -3761,6 +3823,7 @@ private:
 	void imGuiRender(VkCommandBuffer commandBuffer) {
 		static float f = 0.0f;
 
+		m_sampler.OnFrameEnd();
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -3795,6 +3858,10 @@ private:
 		ImGui::SliderInt("Culling Radius", &grassParameters.fCullRadius, -4, 4);
 		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
 		ImGui::Combo("Grass Col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
+		ImGui::End();
+
+		ImGui::Begin("Graphics General Triage");
+		m_hudRenderer.Render();
 		ImGui::End();
 
 		ImGui::Begin("Render Window");
@@ -3851,6 +3918,8 @@ private:
 	}
 
 	void cleanup() {
+		vkDeviceWaitIdle(device);
+
 		cleanupSwapChain();
 
 		vkDestroySampler(device, textureSampler, nullptr);
@@ -3899,6 +3968,9 @@ private:
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
+		ImPlot::DestroyContext();
+
+		m_sampler.EndSession();
 
 		vkDestroyDescriptorPool(device, grassDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, groundDescriptorPool, nullptr);

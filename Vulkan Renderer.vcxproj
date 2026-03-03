@@ -77,13 +77,13 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include\windows-desktop-x64;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\rapidyaml-0.4.0;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\vulkan;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\bin\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;nvperf_grfx_host.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -95,15 +95,15 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include\windows-desktop-x64;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\rapidyaml-0.4.0;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\vulkan;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\bin\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;nvperf_grfx_host.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -113,13 +113,13 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include\windows-desktop-x64;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\rapidyaml-0.4.0;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\vulkan;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\bin\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;nvperf_grfx_host.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -131,15 +131,15 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.321.1\Include;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\include\windows-desktop-x64;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\include;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\rapidyaml-0.4.0;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\vulkan;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;C:\Users\Ale\source\repos\Vulkan Renderer\External\glfw3.4\lib-vc2022;C:\Users\Ale\source\repos\Vulkan Renderer\External\NSightNVPerf\NvPerf\bin\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;nvperf_grfx_host.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -150,6 +150,14 @@
     <ClCompile Include="External\ImGui\imgui_impl_vulkan.cpp" />
     <ClCompile Include="External\ImGui\imgui_tables.cpp" />
     <ClCompile Include="External\ImGui\imgui_widgets.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\imgui_impl_vulkan.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui_draw.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui_tables.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui_widgets.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16\implot.cpp" />
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16\implot_items.cpp" />
     <ClCompile Include="ImGUIRenderer.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Renderer.cpp" />

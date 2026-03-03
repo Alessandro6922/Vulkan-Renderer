@@ -51,6 +51,30 @@
     <ClCompile Include="Renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16\implot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\implot-0.16\implot_items.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui_draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui_tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui_widgets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\imgui_impl_glfw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\imgui_impl_vulkan.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grassShader.frag">
