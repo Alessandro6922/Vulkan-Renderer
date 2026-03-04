@@ -144,12 +144,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="External\ImGui\imgui.cpp" />
-    <ClCompile Include="External\ImGui\imgui_draw.cpp" />
-    <ClCompile Include="External\ImGui\imgui_impl_glfw.cpp" />
-    <ClCompile Include="External\ImGui\imgui_impl_vulkan.cpp" />
-    <ClCompile Include="External\ImGui\imgui_tables.cpp" />
-    <ClCompile Include="External\ImGui\imgui_widgets.cpp" />
     <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\imgui_impl_glfw.cpp" />
     <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\backends\imgui_impl_vulkan.cpp" />
     <ClCompile Include="External\NSightNVPerf\Samples\NvPerfUtility\imports\imgui-docking\imgui.cpp" />
