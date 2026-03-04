@@ -3823,6 +3823,10 @@ private:
 	void imGuiRender(VkCommandBuffer commandBuffer) {
 		static float f = 0.0f;
 
+		drawIndirectBufferObject* ibo = reinterpret_cast<drawIndirectBufferObject*>(grassIndirectDrawBufferMapped[currentFrame]);
+
+		uint32_t totalInstances = ibo->highLodDraw.instanceCount + ibo->lowLodDraw.instanceCount;
+
 		m_sampler.OnFrameEnd();
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -3837,6 +3841,7 @@ private:
 		ImGui::Text("Yaw: %.3f Pitch: %.3f", camera.getYaw(), camera.getPitch());
 		ImGui::Text("Forward Vector: %.3f %.3f %.3f", camera.getForward().x, camera.getForward().y, camera.getForward().z);
 		ImGui::Text("Render Size : %i by %i", static_cast<int>(renderImageWindowSize.x), static_cast<int>(renderImageWindowSize.y));
+		ImGui::Text("Grass blades : %i", totalInstances);
 		ImGui::End();
 
 		ImGui::Begin("Grass Parameters");
