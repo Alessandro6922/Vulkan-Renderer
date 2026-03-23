@@ -194,7 +194,7 @@ vec3 calculateWindOffset(vec2 uv){
 	return vec3(windDirectionVec.x, 0, windDirectionVec.y) * windLeanAngle;
 }
 
-layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 layout(triangles) out;
 layout(max_vertices = 256, max_primitives = 192) out;
 void main(){
@@ -240,6 +240,11 @@ void main(){
 
 	SetMeshOutputsEXT(vertexCount, triangleCount);
 
+	vec3 tangent = normalize(cross(vec3(0, 0, 1), clumpNormal));
+	vec3 biTangent = normalize(cross(clumpNormal, tangent));
+
+	float grassLeanStrength = gdbo.grassLean * gdbo.windLeanStrength * texture(noiseSampler, (clumpUV * 3.0) - (gdbo.elapsedTime * vec2(cos(gdbo.windDirection), sin(gdbo.windDirection)) * gdbo.windSpeed)).r;	
+
 	for(uint i = 0; i < 2; ++i){
 		int vertID = int(gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z * i);
 
@@ -250,10 +255,6 @@ void main(){
 
 		const float height = gdbo.grassHeight + float(Random(seed, bladeID, 20)) * RANDOM_HEIGHT_SCALE;
 
-		vec3 tangent = normalize(cross(vec3(0, 0, 1), clumpNormal));
-		vec3 biTangent = normalize(cross(clumpNormal, tangent));
-
-		float grassLeanStrength = gdbo.grassLean * gdbo.windLeanStrength * texture(noiseSampler, (clumpUV * 3.0) - (gdbo.elapsedTime * vec2(cos(gdbo.windDirection), sin(gdbo.windDirection)) * gdbo.windSpeed)).r;
 		float bladeDirectionAngle = mix(2.0 * PI * Random(seed, 4, bladeID), gdbo.windDirection, 0.9);
 		vec2 bladeDirection = vec2(cos(bladeDirectionAngle), sin(bladeDirectionAngle)) * gdbo.grassHeight * grassLeanStrength;
 
