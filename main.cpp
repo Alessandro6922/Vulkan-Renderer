@@ -3826,6 +3826,8 @@ private:
 		drawIndirectBufferObject* ibo = reinterpret_cast<drawIndirectBufferObject*>(grassIndirectDrawBufferMapped[currentFrame]);
 
 		uint32_t totalInstances = ibo->highLodDraw.instanceCount + ibo->lowLodDraw.instanceCount;
+		uint32_t highInstances = ibo->highLodDraw.instanceCount;
+		uint32_t lowInstances = ibo->lowLodDraw.instanceCount;
 
 		m_sampler.OnFrameEnd();
 		ImGui_ImplVulkan_NewFrame();
@@ -3842,6 +3844,8 @@ private:
 		ImGui::Text("Forward Vector: %.3f %.3f %.3f", camera.getForward().x, camera.getForward().y, camera.getForward().z);
 		ImGui::Text("Render Size : %i by %i", static_cast<int>(renderImageWindowSize.x), static_cast<int>(renderImageWindowSize.y));
 		ImGui::Text("Grass blades : %i", totalInstances);
+		ImGui::Text("High Lod : %i", highInstances);
+		ImGui::Text("Low Lod : %i", lowInstances);
 		ImGui::End();
 
 		ImGui::Begin("Grass Parameters");

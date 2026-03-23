@@ -253,7 +253,7 @@ void main() {
 		}
 	}
 	else if(colourOut == 3){
-		fragColour = vec3(Random(seed * instanceOffset), Random(int(bladePos.x) + seed), seed * instanceOffset + int(bladePos.z) + 2));
+		fragColour = vec3(Random(seed * instanceOffset), Random(int(bladePos.x) + seed), seed * instanceOffset + int(bladePos.z) + 2);
 	}
 	else if(colourOut == 4){
 		fragColour = vec3(1, 1, 1);
