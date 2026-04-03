@@ -194,7 +194,7 @@ vec3 calculateWindOffset(vec2 uv){
 	return vec3(windDirectionVec.x, 0, windDirectionVec.y) * windLeanAngle;
 }
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(triangles) out;
 layout(max_vertices = 256, max_primitives = 192) out;
 void main(){
@@ -245,7 +245,7 @@ void main(){
 
 	float grassLeanStrength = gdbo.grassLean * gdbo.windLeanStrength * texture(noiseSampler, (clumpUV * 3.0) - (gdbo.elapsedTime * vec2(cos(gdbo.windDirection), sin(gdbo.windDirection)) * gdbo.windSpeed)).r;	
 
-	for(uint i = 0; i < 2; ++i){
+	for(uint i = 0; i < 4; ++i){
 		int vertID = int(gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z * i);
 
 		if(vertID >= vertexCount) break;
@@ -309,7 +309,7 @@ void main(){
 		}
 	}
 
-	for(uint i = 0; i < 2; ++i){
+	for(uint i = 0; i < 4; ++i){
 		int triID = int(gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z * i);
 		
 		if(triID >= triangleCount) break;

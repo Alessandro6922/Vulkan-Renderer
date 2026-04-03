@@ -203,7 +203,7 @@ void main() {
 
 	const uint seed = CombineSeed(uint(bladePos.x) + uint(bladePos.w) + int(texture(noiseSampler, bladeUV * 15).r * 100) * instanceOffset, uint(bladePos.z) + uint(bladePos.w) * instanceOffset);
 
-	float distanceFromCam = abs(length(gdbo.camPosition.xyz - bladePos.xyz));
+	// float distanceFromCam = abs(length(gdbo.camPosition.xyz - bladePos.xyz));
 
 	float grassLeanStrength = gdbo.grassLean * gdbo.windLeanStrength * texture(noiseSampler, (bladeUV * 3.0) - (gdbo.elapsedTime * vec2(cos(gdbo.windDirection), sin(gdbo.windDirection)) * gdbo.windSpeed)).r;
 	float bladeDirectionAngle = mix(2.0 * PI * Random(seed, 4, int(bladePos.w) + int(bladePos.z)), gdbo.windDirection, 0.9);

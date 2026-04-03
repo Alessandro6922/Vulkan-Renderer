@@ -83,6 +83,8 @@ const int MAX_FRAMES_IN_FLIGHT = 3;
 
 const int GRASS_BLADE_COUNT = 65536 * 4;
 
+const bool ENABLE_NV_PERF = true;
+
 Camera camera;
 
 namespace {
@@ -337,7 +339,9 @@ public:
 	void run() {
 		initWindow();
 		initVulkan();
-		initNVPerf();
+		if (ENABLE_NV_PERF) {
+			initNVPerf();
+		}
 		initImGui();
 		initGrassBufferParams();
 		generateGrassPositions();
@@ -644,8 +648,10 @@ private:
 
 		ImGui_ImplVulkan_Init(&initInfo);
 
-		nv::perf::hud::HudImPlotRenderer::SetStyle();
-		m_hudRenderer.Initialize(m_hudDataModel);
+		if (ENABLE_NV_PERF) {
+			nv::perf::hud::HudImPlotRenderer::SetStyle();
+			m_hudRenderer.Initialize(m_hudDataModel);
+		}
 
 		renderTextureSet = ImGui_ImplVulkan_AddTexture(textureSampler, renderImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		//ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physicalDevice, device, window, ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice), nullptr, WIDTH, HEIGHT, imageCount, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -3733,10 +3739,12 @@ private:
 			recreateRenderWindow();
 		}
 
-		m_sampler.DecodeCounters();
-		m_sampler.ConsumeSamples([&](const uint8_t* pCounterDataImage, size_t counterDataImageSize, uint32_t rangeIndex, bool& stop) {stop = false; return m_hudDataModel.AddSample(pCounterDataImage, counterDataImageSize, rangeIndex); });
-		for (auto& frameDelimiter : m_sampler.GetFrameDelimiters()) {
-			m_hudDataModel.AddFrameDelimiter(frameDelimiter.frameEndTime);
+		if (ENABLE_NV_PERF) {
+			m_sampler.DecodeCounters();
+			m_sampler.ConsumeSamples([&](const uint8_t* pCounterDataImage, size_t counterDataImageSize, uint32_t rangeIndex, bool& stop) {stop = false; return m_hudDataModel.AddSample(pCounterDataImage, counterDataImageSize, rangeIndex); });
+			for (auto& frameDelimiter : m_sampler.GetFrameDelimiters()) {
+				m_hudDataModel.AddFrameDelimiter(frameDelimiter.frameEndTime);
+			}
 		}
 
 		updateUniformBuffer(currentFrame);
@@ -3829,7 +3837,9 @@ private:
 		uint32_t highInstances = ibo->highLodDraw.instanceCount;
 		uint32_t lowInstances = ibo->lowLodDraw.instanceCount;
 
-		m_sampler.OnFrameEnd();
+		if (ENABLE_NV_PERF) {
+			m_sampler.OnFrameEnd();
+		}
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -3869,9 +3879,11 @@ private:
 		ImGui::Combo("Grass Col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
 		ImGui::End();
 
-		ImGui::Begin("Graphics General Triage");
-		m_hudRenderer.Render();
-		ImGui::End();
+		if (ENABLE_NV_PERF) {
+			ImGui::Begin("Graphics General Triage");
+			m_hudRenderer.Render();
+			ImGui::End();
+		}
 
 		ImGui::Begin("Render Window");
 
@@ -3979,7 +3991,9 @@ private:
 		ImGui::DestroyContext();
 		ImPlot::DestroyContext();
 
-		m_sampler.EndSession();
+		if (ENABLE_NV_PERF) {
+			m_sampler.EndSession();
+		}
 
 		vkDestroyDescriptorPool(device, grassDescriptorPool, nullptr);
 		vkDestroyDescriptorPool(device, groundDescriptorPool, nullptr);
