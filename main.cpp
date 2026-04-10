@@ -140,6 +140,30 @@ namespace {
 					lockMouse = true;
 				}
 				break;
+			case GLFW_KEY_1:
+				camera.setPosition(glm::vec3(0, 50, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				break;
+			case GLFW_KEY_2:
+				camera.setPosition(glm::vec3(0, 100, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				break;
+			case GLFW_KEY_3:
+				camera.setPosition(glm::vec3(0, 150, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				break;
+			case GLFW_KEY_4:
+				camera.setPosition(glm::vec3(0, 200, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				break;
+			case GLFW_KEY_5:
+				camera.setPosition(glm::vec3(0, 250, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				break;
+			case GLFW_KEY_6:
+				camera.setPosition(glm::vec3(0, 300, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				break;
 			default:
 				break;
 			}

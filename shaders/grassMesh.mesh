@@ -227,9 +227,8 @@ void main(){
 	const int maxVerticesPerBladeEdge = 16;
 	const int minVerticesPerBladeEdge = 3;
 
-	float distanceFromCam = abs(length(gdbo.camPosition.xyz - clumpCentre));
-	float maxDistanceFromCam = gdbo.maxDistance;
-	const int actualVerticesPerBladeEdge = max(int(mix(maxVerticesPerBladeEdge, minVerticesPerBladeEdge, clamp(distanceFromCam / maxDistanceFromCam, 0.0, 1.0)) / 2) * 2, minVerticesPerBladeEdge);
+	float distanceFromCam = length(gdbo.camPosition.xyz - clumpCentre);
+	const int actualVerticesPerBladeEdge = max(int(mix(maxVerticesPerBladeEdge, minVerticesPerBladeEdge, clamp(distanceFromCam / gdbo.maxDistance, 0.0, 1.0)) / 2) * 2, minVerticesPerBladeEdge);
 
 	const int verticesPerBlade = 2 * actualVerticesPerBladeEdge;
 	const int trianglesPerBlade = 2 * (actualVerticesPerBladeEdge - 1);

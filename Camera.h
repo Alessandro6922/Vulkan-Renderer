@@ -20,6 +20,8 @@ public:
 
 	glm::vec3 getVelocity();
 	glm::vec3 getPosition();
+	void setPosition(glm::vec3 position);
+	void setRotation(float yaw, float pitch);
 	float getYaw();
 	float getPitch();
 	float getSensitivity();

@@ -73,6 +73,17 @@ glm::vec3 Camera::getPosition()
 	return position;
 }
 
+void Camera::setPosition(glm::vec3 positionIn)
+{
+	position = positionIn;
+}
+
+void Camera::setRotation(float yawIn, float pitchIn)
+{
+	yaw = yawIn;
+	pitch = pitchIn;
+}
+
 float Camera::getYaw()
 {
 	return yaw;

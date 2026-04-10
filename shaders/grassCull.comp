@@ -132,7 +132,7 @@ void main(){
 
     float dist = length(gdbo.camPosition.xyz - worldPos);
 
-    if(dist < gdbo.maxDistance){
+    if(dist <= gdbo.maxDistance){
         uint index = atomicAdd(indirectDraw.highLod.instanceCount, 4);
         ssboCulled.bladeInfoHighLod[index / 4] = ssbo.bladeInfo[overallWorkGroupID];
     } else {
