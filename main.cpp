@@ -83,7 +83,7 @@ const int MAX_FRAMES_IN_FLIGHT = 3;
 
 const int GRASS_BLADE_COUNT = 65536 * 4;
 
-const bool ENABLE_NV_PERF = true;
+const bool ENABLE_NV_PERF = false;
 
 Camera camera;
 
@@ -556,7 +556,7 @@ private:
 
 	float currentFrameTime = 0;
 	float lastFrameTime = 0;
-	float elapsedTime;
+	float elapsedTime = 0;
 	float dt;
 
 	bool renderWithMesh = false;
@@ -3732,6 +3732,27 @@ private:
 			currentFrameTime = static_cast<float>(glfwGetTime());
 			dt = currentFrameTime - lastFrameTime;
 			elapsedTime += dt;
+
+			//if (elapsedTime >= 30.f) {
+			//	camera.setPosition(glm::vec3(0, 300, 0));
+			//	camera.setRotation(0, -3.1415 / 2);
+			//}
+			//else if (elapsedTime >= 25.f) {
+			//	camera.setPosition(glm::vec3(0, 250, 0));
+			//	camera.setRotation(0, -3.1415 / 2);
+			//}
+			//else if (elapsedTime >= 20.f) {
+			//	camera.setPosition(glm::vec3(0, 200, 0));
+			//	camera.setRotation(0, -3.1415 / 2);
+			//}
+			//else if (elapsedTime >= 15.f) {
+			//	camera.setPosition(glm::vec3(0, 150, 0));
+			//	camera.setRotation(0, -3.1415 / 2);
+			//}
+			//else if (elapsedTime >= 10.f) {
+			//	camera.setPosition(glm::vec3(0, 100, 0));
+			//	camera.setRotation(0, -3.1415 / 2);
+			//}
 
 			// check for events
 			glfwPollEvents();

@@ -2,10 +2,10 @@
 
 Camera::Camera()
 {
-	position = glm::vec3(2.0f, 2.0f, 2.0f);
+	position = glm::vec3(0.0f, 50.0f, 0.0f);
 	velocity = glm::vec3(0.0f);
 	yaw = 0.0f;
-	pitch = 0.0f;
+	pitch = -3.1415f / 2.f;
 	speedMult = 15.f;
 
 	sensitivity = 0.0005f;
