@@ -1,7 +1,5 @@
 /*
 TODO:
-	increase blade count for vertex pipeline
-	fix mesh pipeline
 */
 
 
@@ -53,6 +51,7 @@ TODO:
 #include "NvPerfHudDataModel.h"
 #include "NvPerfHudImPlotRenderer.h"
 #include "nvperf_host_impl.h"
+#include "NvPerfReportGeneratorVulkan.h"
 
 #define RYML_SINGLE_HDR_DEFINE_NOW
 #include <ryml_all.hpp>
@@ -84,6 +83,7 @@ const int MAX_FRAMES_IN_FLIGHT = 3;
 const int GRASS_BLADE_COUNT = 65536 * 4;
 
 const bool ENABLE_NV_PERF = false;
+const bool ENABLE_NV_PERF_REPORTS = true;
 
 Camera camera;
 
@@ -91,7 +91,7 @@ namespace {
 	double prevX = 0.0f;
 	double prevY = 0.0f;
 
-	bool lockMouse = true;
+	bool lockMouse = false;
 
 	void mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition) {		
 		if (lockMouse) {
@@ -204,11 +204,11 @@ const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
 };
 
-const std::vector<const char*> deviceExtensions = {
+std::vector<const char*> deviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	VK_KHR_SPIRV_1_4_EXTENSION_NAME,
 	VK_EXT_MESH_SHADER_EXTENSION_NAME,
-	VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME
+	VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME,
 };
 
 #ifdef NDEBUG
@@ -366,6 +366,7 @@ public:
 		if (ENABLE_NV_PERF) {
 			initNVPerf();
 		}
+
 		initImGui();
 		initGrassBufferParams();
 		generateGrassPositions();
@@ -557,13 +558,20 @@ private:
 	float currentFrameTime = 0;
 	float lastFrameTime = 0;
 	float elapsedTime = 0;
+	float reportGenTimer = 1;
 	float dt;
 
-	bool renderWithMesh = false;
+	bool renderWithMesh = true;
 		
 	nv::perf::sampler::PeriodicSamplerTimeHistoryVulkan m_sampler;
 	nv::perf::hud::HudDataModel                        m_hudDataModel;
 	nv::perf::hud::HudImPlotRenderer                   m_hudRenderer;
+
+	nv::perf::profiler::ReportGeneratorVulkan m_reportGenerator; 
+	double m_nvperfWarmupTime = 0.5;
+	nv::perf::ClockInfo m_clockInfo;
+
+	bool isCollecting = false;
 
 	void initWindow() {
 		// initialise the GLFW library and tell it not to create an openGL context
@@ -606,6 +614,27 @@ private:
 
 		m_sampler.SetConfig(&m_hudDataModel.GetCounterConfiguration());
 		m_hudDataModel.PrepareSampleProcessing(m_sampler.GetCounterData());
+	}
+
+	void initNVPerfReportGen() {
+		if (!m_reportGenerator.InitializeReportGenerator(instance, physicalDevice, device)) {
+			throw std::runtime_error("Failed to initialise report generator!");
+		}
+
+		m_reportGenerator.additionalMetrics = {
+			"zrop__cycles_elapsed",
+			"lts__t_sector_hit_rate",
+			"crop__write_throughput"
+		};
+		m_reportGenerator.SetFrameLevelRangeName("Frame");
+		m_reportGenerator.SetNumNestingLevels(2);
+		m_reportGenerator.SetMaxNumRanges(2);
+		m_reportGenerator.outputOptions.directoryName = "HTMLReports\\Vertex\\100Dist\\50";
+
+		//m_reportGenerator.SetOpenReportDirectoryAfterCollection(true);
+
+		m_clockInfo = nv::perf::VulkanGetDeviceClockState(instance, physicalDevice, device);
+		nv::perf::VulkanSetDeviceClockState(instance, physicalDevice, device, NVPW_DEVICE_CLOCK_SETTING_LOCK_TO_RATED_TDP);
 	}
 
 	void createImGuiDescriptorPool() {
@@ -691,7 +720,7 @@ private:
 		grassParameters.windSpeed = 0.07f;
 		grassParameters.windOffsetStrength = 0.1;
 		grassParameters.windDirection = 4.3;
-		grassParameters.minLODDistance = 100.0;
+		grassParameters.minLODDistance = 300.0;
 		grassParameters.grassColourOutput = 0;
 		grassParameters.camPosition = glm::vec4(camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0);
 		grassParameters.bezierEndPoint = glm::vec4(0.0f, 1.2f, 1.2f, 3.0f);
@@ -705,6 +734,9 @@ private:
 		pickPhysicalDevice();
 		createLogicalDevice();
 		loadRequiredFunctions();
+		if (ENABLE_NV_PERF_REPORTS) {
+			initNVPerfReportGen();
+		}
 		createSwapChain();
 		createImageViews();
 		createPresentationRenderPass();
@@ -3331,7 +3363,7 @@ private:
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		
+
 		if (renderWithMesh) {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshGraphicsPipeline);
 
@@ -3343,7 +3375,16 @@ private:
 			}
 
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassMeshPipelineLayout, 0, 2, cullingDescriptorSets.data(), 0, nullptr);
+
+			if (ENABLE_NV_PERF_REPORTS) {
+				m_reportGenerator.rangeCommands.PushRange(commandBuffer, "GrassDraw");
+			};
+
 			cmdDrawMeshTasksEXT(commandBuffer, 1, 1, 1);
+
+			if (ENABLE_NV_PERF_REPORTS) {
+				m_reportGenerator.rangeCommands.PopRange(commandBuffer);
+			}
 		}
 		else {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassGraphicsPipeline);
@@ -3359,11 +3400,20 @@ private:
 			vkCmdBindIndexBuffer(commandBuffer, grassIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grassPipelineLayout, 0, 1, &grassDescriptorSets[currentFrame], 0, nullptr);
 			//vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(grassIndices.size()), GRASS_BLADE_COUNT * 4, 0, 0, 0);
+
+			if (ENABLE_NV_PERF_REPORTS) {
+				m_reportGenerator.rangeCommands.PushRange(commandBuffer, "GrassDraw");
+			};
+
 			vkCmdDrawIndexedIndirect(commandBuffer, grassIndirectDrawBuffers[currentFrame], 0, 1, sizeof(drawIndirectBufferObject) * 2);
 
 			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers[3], offsets);
 			vkCmdBindIndexBuffer(commandBuffer, grassIndexLowBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(commandBuffer, grassIndirectDrawBuffers[currentFrame], sizeof(VkDrawIndexedIndirectCommand), 1, sizeof(drawIndirectBufferObject) * 2);
+
+			if (ENABLE_NV_PERF_REPORTS) {
+				m_reportGenerator.rangeCommands.PopRange(commandBuffer);
+			}
 		}
 
 
@@ -3488,6 +3538,11 @@ private:
 		bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
 		bufferDeviceAddressFeatures.pNext = &vulkan11Features;
 
+		VkPhysicalDeviceTimelineSemaphoreFeatures timelineSemaphoreFeatures{};
+		timelineSemaphoreFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+		timelineSemaphoreFeatures.timelineSemaphore = VK_TRUE;
+		timelineSemaphoreFeatures.pNext = &bufferDeviceAddressFeatures;
+
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
@@ -3496,10 +3551,16 @@ private:
 
 		createInfo.pEnabledFeatures = nullptr;
 
+		if (ENABLE_NV_PERF_REPORTS) {
+			if (!nv::perf::VulkanAppendDeviceRequiredExtensions(instance, physicalDevice, vkGetInstanceProcAddr(instance, "vkGetInstanceProcAddr"), deviceExtensions)) {
+				throw std::runtime_error("Failed to append device extensions!");
+			}
+		}
+
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-		createInfo.pNext = &bufferDeviceAddressFeatures;
+		createInfo.pNext = &timelineSemaphoreFeatures;
 
 		if (enableValidationLayers) {
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -3732,32 +3793,71 @@ private:
 			currentFrameTime = static_cast<float>(glfwGetTime());
 			dt = currentFrameTime - lastFrameTime;
 			elapsedTime += dt;
+			reportGenTimer += dt;
 
-			//if (elapsedTime >= 30.f) {
-			//	camera.setPosition(glm::vec3(0, 300, 0));
-			//	camera.setRotation(0, -3.1415 / 2);
-			//}
-			//else if (elapsedTime >= 25.f) {
-			//	camera.setPosition(glm::vec3(0, 250, 0));
-			//	camera.setRotation(0, -3.1415 / 2);
-			//}
-			//else if (elapsedTime >= 20.f) {
-			//	camera.setPosition(glm::vec3(0, 200, 0));
-			//	camera.setRotation(0, -3.1415 / 2);
-			//}
-			//else if (elapsedTime >= 15.f) {
-			//	camera.setPosition(glm::vec3(0, 150, 0));
-			//	camera.setRotation(0, -3.1415 / 2);
-			//}
-			//else if (elapsedTime >= 10.f) {
-			//	camera.setPosition(glm::vec3(0, 100, 0));
-			//	camera.setRotation(0, -3.1415 / 2);
-			//}
+			std::string directoryString = "HTMLReports\\Mesh\\" + std::to_string(grassParameters.minLODDistance) + "\\" + std::to_string(camera.getPosition().y);
+
+			m_reportGenerator.outputOptions.directoryName = directoryString;
+
+			if (elapsedTime >= 35.f) {
+				camera.setPosition(glm::vec3(0, 50, 0));
+				camera.setRotation(0, -3.1415 / 2);
+				elapsedTime = 0.0f;
+				grassParameters.minLODDistance += 50;
+			}
+			else if (elapsedTime >= 30.f) {
+				camera.setPosition(glm::vec3(0, 300, 0));
+				camera.setRotation(0, -3.1415 / 2);
+			}
+			else if (elapsedTime >= 25.f) {
+				camera.setPosition(glm::vec3(0, 250, 0));
+				camera.setRotation(0, -3.1415 / 2);
+			}
+			else if (elapsedTime >= 20.f) {
+				camera.setPosition(glm::vec3(0, 200, 0));
+				camera.setRotation(0, -3.1415 / 2);
+			}
+			else if (elapsedTime >= 15.f) {
+				camera.setPosition(glm::vec3(0, 150, 0));
+				camera.setRotation(0, -3.1415 / 2);
+			}
+			else if (elapsedTime >= 10.f) {
+				camera.setPosition(glm::vec3(0, 100, 0));
+				camera.setRotation(0, -3.1415 / 2);
+			}
 
 			// check for events
 			glfwPollEvents();
 			camera.update(dt);
+
+			if (ENABLE_NV_PERF_REPORTS) {
+				//vkQueueWaitIdle(graphicsQueue);
+				vkDeviceWaitIdle(device);
+
+				if (reportGenTimer >= 5) {
+					if (!isCollecting) {
+						//vkQueueWaitIdle(graphicsQueue);
+						if (!m_reportGenerator.StartCollectionOnNextFrame()) {
+							throw std::runtime_error("Failed to start collecting bruh");
+						}
+						isCollecting = true;
+						reportGenTimer = 0;
+					}
+				}
+				else if (isCollecting && reportGenTimer >= 1) {
+					isCollecting = false;
+				}
+
+				m_reportGenerator.OnFrameStart(graphicsQueue, findQueueFamilies(physicalDevice).graphicsandComputeFamily.value());
+			}
+
+
+
 			drawFrame();
+
+			if (ENABLE_NV_PERF_REPORTS) {
+				m_reportGenerator.OnFrameEnd();
+			}
 
 			lastFrameTime = currentFrameTime;
 		}
@@ -3801,6 +3901,8 @@ private:
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 		ImGuiRenderPass(commandBuffers[currentFrame], imageIndex);
 
+
+
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -3831,7 +3933,13 @@ private:
 		presentInfo.pImageIndices = &imageIndex;
 		presentInfo.pResults = nullptr;
 
+		if (ENABLE_NV_PERF_REPORTS) {
+			vkDeviceWaitIdle(device);
+		}
+
 		result = vkQueuePresentKHR(presentationQueue, &presentInfo);
+
+		vkQueueWaitIdle(graphicsQueue);
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || frameBufferResized) {
 			recreateSwapChain();
@@ -3986,6 +4094,11 @@ private:
 	void cleanup() {
 		vkDeviceWaitIdle(device);
 
+		if (ENABLE_NV_PERF_REPORTS) {
+			m_reportGenerator.Reset();
+			nv::perf::VulkanSetDeviceClockState(instance, physicalDevice, device, m_clockInfo);
+		}
+
 		cleanupSwapChain();
 
 		vkDestroySampler(device, textureSampler, nullptr);
@@ -4115,8 +4228,15 @@ private:
 
 	// The instance is the connection between the application and the vulkan library
 	void createInstance() {
+
 		if (enableValidationLayers && !checkValidationLayerSuppport()) {
 			throw std::runtime_error("Validation layers requested but not available!");
+		}
+
+		if (ENABLE_NV_PERF_REPORTS) {
+			if (!nv::perf::InitializeNvPerf()) {
+				throw std::runtime_error("Failed to initialise nvPerf");
+			}
 		}
 
 		VkApplicationInfo appInfo{};
@@ -4133,6 +4253,13 @@ private:
 
 		// extensions are required to interface with the windows system
 		auto extensions = getRequiredExtensions();
+
+		if (ENABLE_NV_PERF_REPORTS) {
+			if (!nv::perf::VulkanAppendInstanceRequiredExtensions(extensions, appInfo.apiVersion)) {
+				throw std::runtime_error("Failed to append Instance extensions!");
+			}
+		}
+
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 		createInfo.ppEnabledExtensionNames = extensions.data();
 
@@ -4165,6 +4292,8 @@ private:
 		if (enableValidationLayers) {
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
+
+		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 		return extensions;
 	}

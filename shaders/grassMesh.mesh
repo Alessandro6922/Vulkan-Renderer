@@ -301,7 +301,7 @@ void main(){
 			fragColour[vertID] = vec3(clamp(float(actualVerticesPerBladeEdge) / float(maxVerticesPerBladeEdge), 0.0, 1.0));
 		}
 		else if(colourOut == 3){
-			fragColour[vertID] = vec3(Random(overallWorkGroupID), Random(overallWorkGroupID + 1), Random(overallWorkGroupID + 2));
+			fragColour[vertID] = vec3(Random(seed, 0), Random(seed, 1), Random(seed, 2));
 		}
 		else if(colourOut == 4){
 			fragColour[vertID] = vec3(1, 1, 1);

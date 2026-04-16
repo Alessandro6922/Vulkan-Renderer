@@ -249,11 +249,11 @@ void main() {
 		if(gl_BaseInstance == 0){
 			fragColour = vec3(1);		
 		} else {
-			fragColour = vec3(0.3);					
+			fragColour = vec3(0.2);					
 		}
 	}
 	else if(colourOut == 3){
-		fragColour = vec3(Random(seed * instanceOffset), Random(int(bladePos.x) + seed), seed * instanceOffset + int(bladePos.z) + 2);
+			fragColour = vec3(Random(seed, 0), Random(seed, 1), Random(seed, 2));
 	}
 	else if(colourOut == 4){
 		fragColour = vec3(1, 1, 1);
