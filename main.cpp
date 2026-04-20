@@ -82,8 +82,8 @@ const int MAX_FRAMES_IN_FLIGHT = 3;
 
 const int GRASS_BLADE_COUNT = 65536 * 4;
 
-const bool ENABLE_NV_PERF = false;
-const bool ENABLE_NV_PERF_REPORTS = true;
+const bool ENABLE_NV_PERF = true;
+const bool ENABLE_NV_PERF_REPORTS = false;
 
 Camera camera;
 
@@ -91,7 +91,7 @@ namespace {
 	double prevX = 0.0f;
 	double prevY = 0.0f;
 
-	bool lockMouse = false;
+	bool lockMouse = true;
 
 	void mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition) {		
 		if (lockMouse) {
@@ -561,7 +561,7 @@ private:
 	float reportGenTimer = 1;
 	float dt;
 
-	bool renderWithMesh = true;
+	bool renderWithMesh = false;
 		
 	nv::perf::sampler::PeriodicSamplerTimeHistoryVulkan m_sampler;
 	nv::perf::hud::HudDataModel                        m_hudDataModel;
@@ -628,7 +628,7 @@ private:
 		};
 		m_reportGenerator.SetFrameLevelRangeName("Frame");
 		m_reportGenerator.SetNumNestingLevels(2);
-		m_reportGenerator.SetMaxNumRanges(2);
+		m_reportGenerator.SetMaxNumRanges(20);
 		m_reportGenerator.outputOptions.directoryName = "HTMLReports\\Vertex\\100Dist\\50";
 
 		//m_reportGenerator.SetOpenReportDirectoryAfterCollection(true);
@@ -3793,37 +3793,40 @@ private:
 			currentFrameTime = static_cast<float>(glfwGetTime());
 			dt = currentFrameTime - lastFrameTime;
 			elapsedTime += dt;
-			reportGenTimer += dt;
 
-			std::string directoryString = "HTMLReports\\Mesh\\" + std::to_string(grassParameters.minLODDistance) + "\\" + std::to_string(camera.getPosition().y);
+			if (ENABLE_NV_PERF_REPORTS) {
+				reportGenTimer += dt;
 
-			m_reportGenerator.outputOptions.directoryName = directoryString;
+				std::string directoryString = "HTMLReports\\Mesh\\" + std::to_string(int(grassParameters.minLODDistance)) + "\\" + std::to_string(int(camera.getPosition().y));
 
-			if (elapsedTime >= 35.f) {
-				camera.setPosition(glm::vec3(0, 50, 0));
-				camera.setRotation(0, -3.1415 / 2);
-				elapsedTime = 0.0f;
-				grassParameters.minLODDistance += 50;
-			}
-			else if (elapsedTime >= 30.f) {
-				camera.setPosition(glm::vec3(0, 300, 0));
-				camera.setRotation(0, -3.1415 / 2);
-			}
-			else if (elapsedTime >= 25.f) {
-				camera.setPosition(glm::vec3(0, 250, 0));
-				camera.setRotation(0, -3.1415 / 2);
-			}
-			else if (elapsedTime >= 20.f) {
-				camera.setPosition(glm::vec3(0, 200, 0));
-				camera.setRotation(0, -3.1415 / 2);
-			}
-			else if (elapsedTime >= 15.f) {
-				camera.setPosition(glm::vec3(0, 150, 0));
-				camera.setRotation(0, -3.1415 / 2);
-			}
-			else if (elapsedTime >= 10.f) {
-				camera.setPosition(glm::vec3(0, 100, 0));
-				camera.setRotation(0, -3.1415 / 2);
+				m_reportGenerator.outputOptions.directoryName = directoryString;
+
+				if (elapsedTime >= 35.f) {
+					camera.setPosition(glm::vec3(0, 50, 0));
+					camera.setRotation(0, -3.1415 / 2);
+					elapsedTime = 0.0f;
+					grassParameters.minLODDistance += 50;
+				}
+				else if (elapsedTime >= 30.f) {
+					camera.setPosition(glm::vec3(0, 300, 0));
+					camera.setRotation(0, -3.1415 / 2);
+				}
+				else if (elapsedTime >= 25.f) {
+					camera.setPosition(glm::vec3(0, 250, 0));
+					camera.setRotation(0, -3.1415 / 2);
+				}
+				else if (elapsedTime >= 20.f) {
+					camera.setPosition(glm::vec3(0, 200, 0));
+					camera.setRotation(0, -3.1415 / 2);
+				}
+				else if (elapsedTime >= 15.f) {
+					camera.setPosition(glm::vec3(0, 150, 0));
+					camera.setRotation(0, -3.1415 / 2);
+				}
+				else if (elapsedTime >= 10.f) {
+					camera.setPosition(glm::vec3(0, 100, 0));
+					camera.setRotation(0, -3.1415 / 2);
+				}
 			}
 
 			// check for events
