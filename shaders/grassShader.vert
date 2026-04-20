@@ -223,10 +223,10 @@ void main() {
 	
 
 	vec3 p0 = bladePos.xyz + bladeOffset;
-	vec3 p2 = p0 + vec3(0.0, gdbo.grassHeight, 0.0) + vec3(bladeDirection.x, 0.0, bladeDirection.y);
+	vec3 p2 = p0 + vec3(0.0, height, 0.0) + vec3(bladeDirection.x, 0.0, bladeDirection.y);
 	vec3 p1 = p0 + ((p2 - p0) * 0.75) + cross(((p2 - p0) * 0.75), sideVec) * gdbo.curveStrength;
 
-	MakePersistentLength(p0, p1, p2, gdbo.grassHeight);
+	MakePersistentLength(p0, p1, p2, height);
 
 	vec3 basePoint = p0;
 	p0 += offset * 1.0;
