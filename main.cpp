@@ -3,7 +3,7 @@ TODO:
 */
 
 
-#include <vulkan/vulkan.h> // according to the tutorial this isnt needed as its included in the below header but i get errors without it so idk
+#include <vulkan/vulkan.h>
 #define GLFW_INCLUE_VULKAN
 #include "External/glfw3.4/include/GLFW/glfw3.h"
 
@@ -82,7 +82,7 @@ const int MAX_FRAMES_IN_FLIGHT = 3;
 
 const int GRASS_BLADE_COUNT = 65536 * 4;
 
-const bool ENABLE_NV_PERF = true;
+bool ENABLE_NV_PERF = false;
 const bool ENABLE_NV_PERF_REPORTS = false;
 
 Camera camera;
@@ -4033,6 +4033,7 @@ private:
 		ImGui::SliderInt("Culling Radius", &grassParameters.fCullRadius, -4, 4);
 		ImGui::SliderFloat("Lod dist", &grassParameters.minLODDistance, 1.0f, 1000.0f, "%.f");
 		ImGui::Combo("Grass Col", &grassParameters.grassColourOutput, grassColOptions, IM_ARRAYSIZE(grassColOptions));
+		//ImGui::Checkbox("Enable Profiler? ", &ENABLE_NV_PERF);
 		ImGui::End();
 
 		if (ENABLE_NV_PERF) {
