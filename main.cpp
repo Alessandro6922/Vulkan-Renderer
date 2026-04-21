@@ -4015,16 +4015,16 @@ private:
 		ImGui::End();
 
 		ImGui::Begin("Grass Parameters");
-		ImGui::SliderFloat("Lean", &grassParameters.grassLean, 0.01f, 1.0f);
+		ImGui::SliderFloat("Lean", &grassParameters.grassLean, 0.01f, 2.0f);
 		ImGui::SliderFloat("Height", &grassParameters.grassHeight, 0.1f, 10.0f);
 		ImGui::SliderFloat("Thickness", &grassParameters.bladeThickness, 0.01f, 3.0f);
 		ImGui::SliderFloat("Curve", &grassParameters.curveStrength, 0.0f, 1.0f);
 		ImGui::End();
 
 		ImGui::Begin("Wind Parameters");
-		ImGui::SliderFloat("Wind Strength", &grassParameters.windLeanStrength, 0.0f, 30.0f);
+		ImGui::SliderFloat("Wind Strength", &grassParameters.windLeanStrength, 0.01f, 30.0f);
 		ImGui::SliderFloat("Wind Speed", &grassParameters.windSpeed, 0.0f, 1.0f);
-		ImGui::SliderFloat("Wind Waviness", &grassParameters.windOffsetStrength, 0.0f, 1.0f);
+		//ImGui::SliderFloat("Wind Waviness", &grassParameters.windOffsetStrength, 0.0f, 1.0f);
 		ImGui::SliderFloat("Wind Direction", &grassParameters.windDirection, 0.0f, 6.28f);
 		ImGui::End();
 
