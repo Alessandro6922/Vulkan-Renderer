@@ -45,6 +45,7 @@ void main() {
 		vec3 lightDir = lightDirection;
 
 		vec4 texColour = texture(texSampler, fragTexCoord);
+		//texColour += vec4(0.1f, 0.3f, 0.1f, 0.0f) * ( 1.0f - abs(fragTexCoord.x));
 		texColour.rgb *= ambientColour;
 		float intesity = normalize(dot(normal, lightDir));
 		float backsideIntensity = normalize(dot(-normal, lightDir));
